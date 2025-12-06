@@ -19,7 +19,15 @@ const usuariosController = {
         if (err) {
           res.status(500).json({ mensaje: "Error al obtener usuarios" });
         } else {
-          res.json(usuarios);
+          // PostgreSQL devuelve { rows: [...], ... }, MySQL devuelve array directamente
+          const rows = usuarios.rows || usuarios;
+          // Asegurarse de que rows es un array
+          if (Array.isArray(rows)) {
+            res.json(rows);
+          } else {
+            console.error("Error: usuarios no es un array:", typeof usuarios, usuarios);
+            res.status(500).json({ mensaje: "Error: formato de respuesta inválido" });
+          }
         }
       }
     );

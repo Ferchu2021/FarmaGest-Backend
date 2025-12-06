@@ -12,7 +12,15 @@ const clientesController = {
         console.error("Error al obtener clientes:", err);
         res.status(500).json({ mensaje: "Error al obtener clientes" });
       } else {
-        res.json(clientes);
+        // PostgreSQL devuelve { rows: [...], ... }, MySQL devuelve array directamente
+        const rows = clientes.rows || clientes;
+        // Asegurarse de que rows es un array
+        if (Array.isArray(rows)) {
+          res.json(rows);
+        } else {
+          console.error("Error: clientes no es un array:", typeof clientes, clientes);
+          res.status(500).json({ mensaje: "Error: formato de respuesta inválido" });
+        }
       }
     });
   },
@@ -77,15 +85,27 @@ const clientesController = {
 
   obtenerObrasSociales: (req, res) => {
     Cliente.obtenerObrasSociales((err, obrasSociales) => {
-      if (err) throw err;
-      res.json(obrasSociales);
+      if (err) {
+        console.error("Error al obtener obras sociales:", err);
+        res.status(500).json({ mensaje: "Error al obtener obras sociales" });
+      } else {
+        // PostgreSQL devuelve { rows: [...], ... }, MySQL devuelve array directamente
+        const rows = obrasSociales.rows || obrasSociales;
+        res.json(rows);
+      }
     });
   },
 
   obtenerCiudades: (req, res) => {
     Cliente.obtenerCiudades((err, ciudades) => {
-      if (err) throw err;
-      res.json(ciudades);
+      if (err) {
+        console.error("Error al obtener ciudades:", err);
+        res.status(500).json({ mensaje: "Error al obtener ciudades" });
+      } else {
+        // PostgreSQL devuelve { rows: [...], ... }, MySQL devuelve array directamente
+        const rows = ciudades.rows || ciudades;
+        res.json(rows);
+      }
     });
   },
 };

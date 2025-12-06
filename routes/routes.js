@@ -1,6 +1,26 @@
 const express = require("express");
 const router = express.Router();
 const db = require("../db");
+
+// Ruta raíz de la API
+router.get("/", (req, res) => {
+  res.json({
+    message: "FarmaGest API",
+    version: "1.0.0",
+    endpoints: {
+      productos: "/api/productos",
+      usuarios: "/api/usuarios",
+      clientes: "/api/clientes",
+      proveedores: "/api/proveedores",
+      ventas: "/api/ventas",
+      obrasSociales: "/api/obras-sociales",
+      reportes: "/api/reportes",
+      sesiones: "/api/sesiones",
+      auth: "/api/auth"
+    }
+  });
+});
+
 // Middleware para actualizar ultima_actividad de la sesión, si está presente
 router.use((req, res, next) => {
   const sesion = req.headers["x-sesion-id"] || req.query.sesion || (req.body && req.body.sesion);

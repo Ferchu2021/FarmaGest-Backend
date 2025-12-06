@@ -16,7 +16,15 @@ const obrasSocialesController = {
           console.error("Error al obtener obras sociales:", err);
           res.status(500).json({ mensaje: "Error al obtener obras sociales" });
         } else {
-          res.json(obrasSociales);
+          // PostgreSQL devuelve { rows: [...], ... }, MySQL devuelve array directamente
+          const rows = obrasSociales.rows || obrasSociales;
+          // Asegurarse de que rows es un array
+          if (Array.isArray(rows)) {
+            res.json(rows);
+          } else {
+            console.error("Error: obrasSociales no es un array:", typeof obrasSociales, obrasSociales);
+            res.status(500).json({ mensaje: "Error: formato de respuesta inválido" });
+          }
         }
       }
     );

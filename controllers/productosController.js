@@ -19,7 +19,13 @@ const productosController = {
         } else {
           // PostgreSQL devuelve { rows: [...], ... }, MySQL devuelve array directamente
           const rows = productos.rows || productos;
-          res.json(rows);
+          // Asegurarse de que rows es un array
+          if (Array.isArray(rows)) {
+            res.json(rows);
+          } else {
+            console.error("Error: productos no es un array:", typeof productos, productos);
+            res.status(500).json({ mensaje: "Error: formato de respuesta inválido" });
+          }
         }
       }
     );

@@ -11,7 +11,15 @@ const proveedoresController = {
         console.error("Error al obtener proveedores:", err);
         res.status(500).json({ mensaje: "Error al obtener proveedores" });
       } else {
-        res.json(proveedores);
+        // PostgreSQL devuelve { rows: [...], ... }, MySQL devuelve array directamente
+        const rows = proveedores.rows || proveedores;
+        // Asegurarse de que rows es un array
+        if (Array.isArray(rows)) {
+          res.json(rows);
+        } else {
+          console.error("Error: proveedores no es un array:", typeof proveedores, proveedores);
+          res.status(500).json({ mensaje: "Error: formato de respuesta inválido" });
+        }
       }
     });
   },
@@ -32,7 +40,7 @@ const proveedoresController = {
       } else {
         res.status(201).json({
           mensaje: "Proveedor agregado correctamente",
-          proveedor_id: resultado.insertId,
+          proveedor_id: resultado.insertId || resultado.rows?.[0]?.proveedor_id || resultado.rows?.[0]?.id,
         });
       }
     });
@@ -58,7 +66,9 @@ const proveedoresController = {
         console.error("Error al eliminar proveedor:", err);
         res.status(500).json({ mensaje: "Error al eliminar proveedor" });
       } else {
-        if (resultado.affectedRows > 0) {
+        // PostgreSQL devuelve rowCount, MySQL devuelve affectedRows
+        const affectedRows = resultado.rowCount || resultado.affectedRows || 0;
+        if (affectedRows > 0) {
           res.json({ mensaje: "Proveedor eliminado correctamente" });
         } else {
           res.status(404).json({ mensaje: "Proveedor no encontrado" });

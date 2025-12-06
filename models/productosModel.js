@@ -45,7 +45,12 @@ class Producto {
         return callback(err, null);
       }
       // PostgreSQL devuelve results.rows, MySQL devuelve results directamente
-      const rows = results.rows || results;
+      let rows = results.rows || results;
+      // Asegurarse de que rows es un array
+      if (!Array.isArray(rows)) {
+        console.error("Error: results.rows no es un array. Tipo:", typeof results, "Contenido:", results);
+        rows = [];
+      }
       callback(null, rows);
     });
   }

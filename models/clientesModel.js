@@ -32,7 +32,14 @@ class Cliente {
     params.push(pageSize, offset);
 
     // La actualización de sesión ahora se maneja en el middleware de routes.js
-    return db.query(query, params, callback);
+    return db.query(query, params, (err, results) => {
+      if (err) {
+        return callback(err, null);
+      }
+      // PostgreSQL devuelve results.rows, MySQL devuelve results directamente
+      const rows = results.rows || results;
+      callback(null, rows);
+    });
   }
 
   static agregarCliente(nuevoCliente, usuario_id, callback) {
@@ -50,8 +57,8 @@ class Cliente {
           return callback(err, null);
         }
         db.query(
-          `INSERT INTO auditoria_clientes (cliente_id, accion, detalle_cambio, fecha_movimiento, usuario_id) VALUES (?, 'CREAR', 'Se ha creado un nuevo cliente ${nuevoCliente.nombre} ${nuevoCliente.apellido}', NOW(), ?)`,
-          [result.insertId, usuario_id], // usuario_id por defecto 1 si no está disponible
+          `INSERT INTO auditoria_clientes (cliente_id, accion, detalle_cambio, fecha_movimiento, usuario_id) VALUES (?, 'CREAR', 'Se ha creado un nuevo cliente ${nuevoCliente.nombre} ${nuevoCliente.apellido}', CURRENT_TIMESTAMP, ?)`,
+          [result.insertId || result.rows?.[0]?.cliente_id || result.rows?.[0]?.id, usuario_id], // usuario_id por defecto 1 si no está disponible
           (err) => {
             if (err) {
               console.error("Error al registrar en auditoría:", err);
@@ -75,11 +82,14 @@ class Cliente {
           return callback(err, null);
         }
 
-        if (resultados.length === 0) {
+        // PostgreSQL devuelve results.rows, MySQL devuelve results directamente
+        const rows = resultados.rows || resultados;
+        
+        if (!rows || rows.length === 0) {
           return callback(new Error("Cliente no encontrado"), null);
         }
 
-        const clienteActual = resultados[0];
+        const clienteActual = rows[0];
 
         let detalle_cambio = "";
 
@@ -114,7 +124,7 @@ class Cliente {
         );
         if (detalle_cambio !== "") {
           db.query(
-            "INSERT INTO auditoria_clientes (cliente_id, accion, detalle_cambio, fecha_movimiento, usuario_id) VALUES (?, 'ACTUALIZAR', ?, NOW(), ?)",
+            "INSERT INTO auditoria_clientes (cliente_id, accion, detalle_cambio, fecha_movimiento, usuario_id) VALUES (?, 'ACTUALIZAR', ?, CURRENT_TIMESTAMP, ?)",
             [cliente_id, detalle_cambio, cliente.usuario_id], // usuario_id por defecto 1 si no está disponible
             (err) => {
               if (err) {
@@ -135,7 +145,7 @@ class Cliente {
     callback
   ) {
     db.query(
-      `INSERT INTO auditoria_clientes (cliente_id, accion, fecha_movimiento,detalle_cambio, usuario_id) VALUES (?, 'ELIMINAR', NOW(),'Se ha eliminado cliente ${clienteNombre} ${clienteApellido}',?)`,
+      `INSERT INTO auditoria_clientes (cliente_id, accion, fecha_movimiento,detalle_cambio, usuario_id) VALUES (?, 'ELIMINAR', CURRENT_TIMESTAMP,'Se ha eliminado cliente ${clienteNombre} ${clienteApellido}',?)`,
       [clienteID, usuario_id],
       (err) => {
         if (err) {
@@ -144,7 +154,7 @@ class Cliente {
       }
     );
     return db.query(
-      "UPDATE clientes SET deleted_at = NOW() WHERE cliente_id = ?",
+      "UPDATE clientes SET deleted_at = CURRENT_TIMESTAMP WHERE cliente_id = ?",
       [clienteID],
       callback
     );
@@ -156,7 +166,15 @@ class Cliente {
       SELECT obra_social_id, obra_social, plan, descuento, codigo
       FROM obras_sociales WHERE deleted_at IS NULL
       `,
-      callback
+      [],
+      (err, results) => {
+        if (err) {
+          return callback(err, null);
+        }
+        // PostgreSQL devuelve results.rows, MySQL devuelve results directamente
+        const rows = results.rows || results;
+        callback(null, rows);
+      }
     );
   }
 
@@ -166,7 +184,15 @@ class Cliente {
       SELECT ciudad_id, ciudad, codigo_postal, provincia_id
       FROM ciudades
       `,
-      callback
+      [],
+      (err, results) => {
+        if (err) {
+          return callback(err, null);
+        }
+        // PostgreSQL devuelve results.rows, MySQL devuelve results directamente
+        const rows = results.rows || results;
+        callback(null, rows);
+      }
     );
   }
 }

@@ -40,10 +40,13 @@ class Venta {
     db.query(
       queryVentas,
       [searchQuery, searchQuery, pageSize, offset],
-      (err, ventas) => {
+      (err, ventasResult) => {
         if (err) return callback(err);
 
-        if (ventas.length === 0) {
+        // PostgreSQL devuelve results.rows, MySQL devuelve results directamente
+        const ventas = ventasResult.rows || ventasResult;
+        
+        if (!ventas || ventas.length === 0) {
           return callback(null, []);
         }
 
@@ -63,8 +66,11 @@ class Venta {
         WHERE iv.venta_id IN (${placeholders})
       `;
 
-        db.query(queryItems, ventaIds, (err, itemsAgregados) => {
+        db.query(queryItems, ventaIds, (err, itemsResult) => {
           if (err) return callback(err);
+
+          // PostgreSQL devuelve results.rows, MySQL devuelve results directamente
+          const itemsAgregados = itemsResult.rows || itemsResult;
 
           const ventasConItems = ventas.map((venta) => {
             const itemsDeVenta = itemsAgregados.filter(
@@ -95,13 +101,20 @@ class Venta {
 
     db.query(queryVenta, [venta_id], (err, resultados) => {
       if (err) return callback(err);
-      if (resultados.length === 0) return callback(null, null);
+      
+      // PostgreSQL devuelve results.rows, MySQL devuelve results directamente
+      const rows = resultados.rows || resultados;
+      
+      if (!rows || rows.length === 0) return callback(null, null);
 
-      const venta = resultados[0];
+      const venta = rows[0];
 
       ItemVenta.obtenerItemsPorVenta(venta_id, (err, items) => {
         if (err) return callback(err);
-        venta.items = items;
+        
+        // Asegurarse de que items sea un array
+        const itemsArray = items.rows || items || [];
+        venta.items = itemsArray;
         callback(null, venta);
       });
     });
@@ -109,12 +122,16 @@ class Venta {
   static obtenerUltimaVenta(callback) {
     const queryVenta = `SELECT venta_id FROM ventas ORDER BY venta_id DESC LIMIT 1`;
 
-    db.query(queryVenta, (err, resultados) => {
+    db.query(queryVenta, [], (err, resultados) => {
       if (err) return callback(err);
-      if (resultados.length === 0) return callback(null, null); // No hay ventas registradas.
+      
+      // PostgreSQL devuelve results.rows, MySQL devuelve results directamente
+      const rows = resultados.rows || resultados;
+      
+      if (!rows || rows.length === 0) return callback(null, null); // No hay ventas registradas.
 
       // Asegurarte de que estás accediendo correctamente a venta_id de resultados
-      const ventaId = resultados[0].venta_id;
+      const ventaId = rows[0].venta_id;
       callback(null, ventaId); // Devuelve el ID directamente.
     });
   }

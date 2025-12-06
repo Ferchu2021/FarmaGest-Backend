@@ -40,7 +40,14 @@ class Usuario {
     params.push(pageSize, offset);
     
     // La actualización de sesión ahora se maneja en el middleware de routes.js
-    return db.query(query, params, callback);
+    return db.query(query, params, (err, results) => {
+      if (err) {
+        return callback(err, null);
+      }
+      // PostgreSQL devuelve results.rows, MySQL devuelve results directamente
+      const rows = results.rows || results;
+      callback(null, rows);
+    });
   }
   static agregarUsuario(nuevoUsuario, callback) {
     // Primero, verifica si el correo ya está registrado

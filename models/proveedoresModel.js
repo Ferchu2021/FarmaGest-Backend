@@ -23,7 +23,19 @@ class Proveedor {
     query += ` LIMIT ? OFFSET ?`;
     params.push(pageSize, offset);
 
-    return db.query(query, params, callback);
+    return db.query(query, params, (err, results) => {
+      if (err) {
+        return callback(err, null);
+      }
+      // PostgreSQL devuelve results.rows, MySQL devuelve results directamente
+      let rows = results.rows || results;
+      // Asegurarse de que rows es un array
+      if (!Array.isArray(rows)) {
+        console.error("Error: results.rows no es un array. Tipo:", typeof results, "Contenido:", results);
+        rows = [];
+      }
+      callback(null, rows);
+    });
   }
 
   static agregarProveedor(nuevoProveedor, callback) {

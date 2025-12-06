@@ -16,7 +16,15 @@ const ventasController = {
           console.error("Error al obtener las ventas:", err);
           res.status(500).json({ mensaje: "Error al obtener las ventas" });
         } else {
-          res.json(ventas);
+          // PostgreSQL devuelve { rows: [...], ... }, MySQL devuelve array directamente
+          const rows = ventas.rows || ventas;
+          // Asegurarse de que rows es un array
+          if (Array.isArray(rows)) {
+            res.json(rows);
+          } else {
+            console.error("Error: ventas no es un array:", typeof ventas, ventas);
+            res.status(500).json({ mensaje: "Error: formato de respuesta inválido" });
+          }
         }
       }
     );

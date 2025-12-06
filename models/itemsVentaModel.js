@@ -34,7 +34,14 @@ class ItemVenta {
       WHERE iv.venta_id = ?
     `;
 
-    db.query(query, [venta_id], callback);
+    db.query(query, [venta_id], (err, results) => {
+      if (err) {
+        return callback(err, null);
+      }
+      // PostgreSQL devuelve results.rows, MySQL devuelve results directamente
+      const rows = results.rows || results;
+      callback(null, rows);
+    });
   }
 
   static eliminarItemsPorVenta(venta_id, callback) {
