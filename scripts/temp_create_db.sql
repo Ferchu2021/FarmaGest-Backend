@@ -1,0 +1,3 @@
+﻿CREATE DATABASE farma_gest;
+CREATE USER farma_app WITH PASSWORD 'FarmaApp2024!';
+GRANT ALL PRIVILEGES ON DATABASE farma_gest TO farma_app;
