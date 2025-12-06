@@ -19,11 +19,34 @@ class Venta {
   }
 
   static obtenerTodasLasVentas(
-    { page = 1, pageSize = 10, search = "", sesion },
+    { page = 1, pageSize = 10, search = "", sesion, fechaDesde = "", fechaHasta = "", numeroFactura = "", clienteId = "" },
     callback
   ) {
     const offset = (page - 1) * pageSize;
     const searchQuery = search ? `%${search}%` : "%";
+    
+    // Función para normalizar formato de fecha a YYYY-MM-DD
+    const normalizeDate = (dateString) => {
+      if (!dateString || dateString.trim() === "") return "";
+      // Si ya está en formato YYYY-MM-DD, devolverlo tal cual
+      if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+        return dateString;
+      }
+      // Si está en formato DD/MM/YYYY, convertir a YYYY-MM-DD
+      if (/^\d{2}\/\d{2}\/\d{4}$/.test(dateString)) {
+        const [day, month, year] = dateString.split('/');
+        return `${year}-${month}-${day}`;
+      }
+      // Si está en formato DD-MM-YYYY, convertir a YYYY-MM-DD
+      if (/^\d{2}-\d{2}-\d{4}$/.test(dateString)) {
+        const [day, month, year] = dateString.split('-');
+        return `${year}-${month}-${day}`;
+      }
+      return dateString;
+    };
+    
+    const fechaDesdeNormalizada = normalizeDate(fechaDesde);
+    const fechaHastaNormalizada = normalizeDate(fechaHasta);
 
     let queryVentas = `
       SELECT v.venta_id, v.fecha_hora, v.numero_factura, c.nombre AS cliente_nombre, 
@@ -35,18 +58,39 @@ class Venta {
       WHERE 1=1
     `;
     
-    // Solo agregar filtro de búsqueda si hay un término de búsqueda
+    const params = [];
+    
+    // Filtro de búsqueda general
     if (search && search.trim() !== "") {
       queryVentas += ` AND (c.nombre LIKE ? OR c.apellido LIKE ? OR u.nombre LIKE ? OR u.apellido LIKE ? OR v.numero_factura::text LIKE ?)`;
+      params.push(searchQuery, searchQuery, searchQuery, searchQuery, searchQuery);
+    }
+    
+    // Filtro por fecha desde
+    if (fechaDesdeNormalizada && fechaDesdeNormalizada.trim() !== "") {
+      queryVentas += ` AND DATE(v.fecha_hora) >= DATE(?)`;
+      params.push(fechaDesdeNormalizada);
+    }
+    
+    // Filtro por fecha hasta
+    if (fechaHastaNormalizada && fechaHastaNormalizada.trim() !== "") {
+      queryVentas += ` AND DATE(v.fecha_hora) <= DATE(?)`;
+      params.push(fechaHastaNormalizada);
+    }
+    
+    // Filtro por número de factura
+    if (numeroFactura && numeroFactura.trim() !== "") {
+      queryVentas += ` AND v.numero_factura::text LIKE ?`;
+      params.push(`%${numeroFactura.trim()}%`);
+    }
+    
+    // Filtro por cliente
+    if (clienteId && clienteId.trim() !== "") {
+      queryVentas += ` AND v.cliente_id = ?`;
+      params.push(parseInt(clienteId));
     }
     
     queryVentas += ` ORDER BY v.fecha_hora DESC LIMIT ? OFFSET ?`;
-
-    // Construir parámetros según si hay búsqueda o no
-    const params = [];
-    if (search && search.trim() !== "") {
-      params.push(searchQuery, searchQuery, searchQuery, searchQuery, searchQuery);
-    }
     params.push(pageSize, offset);
     
     db.query(
@@ -154,163 +198,142 @@ class Venta {
       return callback(new Error("No se pueden agregar ventas sin items"));
     }
 
-    // Iniciar transacción
-    db.getConnection((err, connection) => {
-      if (err) {
-        console.error("Error al obtener conexión:", err);
-        return callback(err);
-      }
-
-      connection.beginTransaction((err) => {
-        if (err) {
-          connection.release();
-          console.error("Error al iniciar transacción:", err);
-          return callback(err);
-        }
-
+    // Usar transacciones de PostgreSQL
+    db.transaction(async (client) => {
+      try {
         // 1. Insertar la venta
-        const numeroFactura = nuevaVenta.numero_factura.toString().padStart(9, "0");
-        connection.query(
-          "INSERT INTO ventas (cliente_id, usuario_id, fecha_hora, total, total_sin_descuento, descuento, numero_factura) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        const numeroFactura = (nuevaVenta.numero_factura || "").toString().padStart(9, "0");
+        const ventaResult = await client.query(
+          `INSERT INTO ventas (cliente_id, usuario_id, fecha_hora, total, total_sin_descuento, descuento, numero_factura) 
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
+           RETURNING venta_id`,
           [
             nuevaVenta.cliente_id,
             nuevaVenta.usuario_id,
-            nuevaVenta.fecha_hora,
-            nuevaVenta.totalConDescuento,
+            nuevaVenta.fecha_hora || new Date().toISOString(),
+            nuevaVenta.totalConDescuento || nuevaVenta.total,
             nuevaVenta.totalSinDescuento,
-            nuevaVenta.descuento,
+            nuevaVenta.descuento || 0,
             numeroFactura,
-          ],
-          (error, resultadoVenta) => {
-            if (error) {
-              connection.rollback(() => {
-                connection.release();
-                console.error("Error al insertar venta:", error);
-                callback(error);
-              });
-              return;
-            }
-
-            const ventaId = resultadoVenta.insertId;
-
-            // 2. Insertar items en batch
-            const valuesItems = itemsAgregados.map((item) => [
-              ventaId,
-              item.productoId,
-              item.cantidad,
-              item.precio,
-              item.total,
-            ]);
-
-            connection.query(
-              "INSERT INTO items_venta (venta_id, producto_id, cantidad, precio_unitario, total_item) VALUES ?",
-              [valuesItems],
-              (err) => {
-                if (err) {
-                  connection.rollback(() => {
-                    connection.release();
-                    console.error("Error al insertar items de venta:", err);
-                    callback(err);
-                  });
-                  return;
-                }
-
-                // 3. Verificar stock antes de actualizar
-                const productoIds = itemsAgregados.map((item) => item.productoId);
-                const placeholders = productoIds.map(() => "?").join(",");
-                
-                // Primero verificar que todos los productos tengan stock suficiente
-                const checkStockQuery = `
-                  SELECT producto_id, stock 
-                  FROM productos 
-                  WHERE producto_id IN (${placeholders})
-                `;
-
-                connection.query(checkStockQuery, productoIds, (err, productos) => {
-                  if (err) {
-                    connection.rollback(() => {
-                      connection.release();
-                      console.error("Error al verificar stock:", err);
-                      callback(err);
-                    });
-                    return;
-                  }
-
-                  // Verificar que todos los productos existan y tengan stock suficiente
-                  const productoMap = {};
-                  productos.forEach((p) => {
-                    productoMap[p.producto_id] = p.stock;
-                  });
-
-                  const stockInsuficiente = itemsAgregados.find((item) => {
-                    const stockDisponible = productoMap[item.productoId];
-                    return !stockDisponible || stockDisponible < item.cantidad;
-                  });
-
-                  if (stockInsuficiente) {
-                    connection.rollback(() => {
-                      connection.release();
-                      console.error(
-                        `Stock insuficiente para el producto ID ${stockInsuficiente.productoId}`
-                      );
-                      callback(
-                        new Error(
-                          `Stock insuficiente para el producto ID ${stockInsuficiente.productoId}`
-                        )
-                      );
-                    });
-                    return;
-                  }
-
-                  // 4. Actualizar stock en batch usando CASE WHEN
-                  const whenCases = itemsAgregados
-                    .map(() => `WHEN ? THEN stock - ?`)
-                    .join(" ");
-
-                  const stockParams = [];
-                  itemsAgregados.forEach((item) => {
-                    stockParams.push(item.productoId, item.cantidad);
-                  });
-                  stockParams.push(...productoIds);
-
-                  const updateStockQuery = `
-                    UPDATE productos 
-                    SET stock = CASE producto_id 
-                      ${whenCases}
-                    END
-                    WHERE producto_id IN (${placeholders})
-                  `;
-
-                  connection.query(updateStockQuery, stockParams, (err, result) => {
-                    if (err) {
-                      connection.rollback(() => {
-                        connection.release();
-                        console.error("Error al actualizar stock:", err);
-                        callback(err);
-                      });
-                      return;
-                    }
-
-                    // 5. Si todo está bien, hacer commit
-                    connection.commit((err) => {
-                      if (err) {
-                        connection.rollback(() => {
-                          connection.release();
-                          console.error("Error al hacer commit:", err);
-                          callback(err);
-                        });
-                        return;
-                      }
-
-                      connection.release();
-                      callback(null, ventaId);
-                    });
-                  });
-                });
-              }
-            );
-          }
+          ]
         );
+
+        const ventaId = ventaResult.rows[0].venta_id;
+
+        // 2. Verificar stock antes de insertar items
+        const productoIds = itemsAgregados.map((item) => item.producto_id || item.productoId);
+        const placeholders = productoIds.map((_, i) => `$${i + 1}`).join(",");
+        
+        const checkStockQuery = `
+          SELECT producto_id, stock 
+          FROM productos 
+          WHERE producto_id IN (${placeholders})
+        `;
+
+        const productosResult = await client.query(checkStockQuery, productoIds);
+        const productos = productosResult.rows || productosResult || [];
+        
+        // Crear mapa de productos
+        const productoMap = {};
+        productos.forEach((p) => {
+          productoMap[p.producto_id] = p.stock;
+        });
+
+        // Verificar stock suficiente
+        for (const item of itemsAgregados) {
+          const productoId = item.producto_id || item.productoId;
+          const cantidad = item.cantidad;
+          const stockDisponible = productoMap[productoId];
+          
+          if (!stockDisponible) {
+            throw new Error(`Producto ID ${productoId} no encontrado`);
+          }
+          
+          if (stockDisponible < cantidad) {
+            throw new Error(`Stock insuficiente para el producto ID ${productoId}. Disponible: ${stockDisponible}, Solicitado: ${cantidad}`);
+          }
+        }
+
+        // 3. Insertar items uno por uno (PostgreSQL no soporta VALUES ? como MySQL)
+        for (const item of itemsAgregados) {
+          await client.query(
+            `INSERT INTO items_venta (venta_id, producto_id, cantidad, precio_unitario, total_item)
+             VALUES ($1, $2, $3, $4, $5)`,
+            [
+              ventaId,
+              item.producto_id,
+              item.cantidad,
+              item.precio_unitario,
+              item.total_item,
+            ]
+          );
+        }
+
+        // 4. Actualizar stock
+        for (const item of itemsAgregados) {
+          await client.query(
+            `UPDATE productos 
+             SET stock = stock - $1 
+             WHERE producto_id = $2`,
+            [item.cantidad, item.producto_id]
+          );
+        }
+
+        callback(null, ventaId);
+      } catch (err) {
+        console.error("Error en transacción de venta:", err);
+        callback(err);
+        throw err; // Re-throw para que el transaction maneje el rollback
+      }
+    });
+  }
+
+  static obtenerVentasPorCliente(clienteId, callback) {
+    const queryVentas = `
+      SELECT v.venta_id, v.fecha_hora, v.numero_factura, v.total, v.total_sin_descuento, v.descuento,
+      c.nombre AS cliente_nombre, c.apellido AS cliente_apellido,
+      u.nombre AS usuario_nombre, u.apellido AS usuario_apellido
+      FROM ventas v
+      LEFT JOIN clientes c ON v.cliente_id = c.cliente_id
+      LEFT JOIN usuarios u ON v.usuario_id = u.usuario_id
+      WHERE v.cliente_id = $1
+      ORDER BY v.fecha_hora DESC
+      LIMIT 10
+    `;
+
+    db.query(queryVentas, [clienteId], (err, ventasResult) => {
+      if (err) return callback(err);
+
+      const ventas = (ventasResult.rows || ventasResult || []);
+      
+      if (ventas.length === 0) {
+        return callback(null, []);
+      }
+
+      // Obtener items para cada venta
+      const ventaIds = ventas.map((v) => v.venta_id);
+      const placeholders = ventaIds.map((_, i) => `$${i + 1}`).join(",");
+      
+      const queryItems = `
+        SELECT iv.venta_id, iv.producto_id, p.nombre AS producto_nombre, iv.cantidad, iv.precio_unitario, iv.total_item
+        FROM items_venta iv
+        JOIN productos p ON iv.producto_id = p.producto_id
+        WHERE iv.venta_id IN (${placeholders})
+      `;
+
+      db.query(queryItems, ventaIds, (err, itemsResult) => {
+        if (err) return callback(err);
+
+        const itemsAgregados = itemsResult.rows || itemsResult || [];
+
+        const ventasConItems = ventas.map((venta) => {
+          const itemsDeVenta = itemsAgregados.filter(
+            (item) => item.venta_id === venta.venta_id
+          );
+          return { ...venta, items: itemsDeVenta };
+        });
+
+        callback(null, ventasConItems);
       });
     });
   }

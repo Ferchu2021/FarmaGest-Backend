@@ -11,6 +11,8 @@ module.exports = () => {
   // Obtener todas las ventas
   router.get("/", ventasController.obtenerTodasLasVentas);
   router.get("/ultima-venta", ventasController.obtenerUltimaVenta);
+  // Obtener ventas por cliente
+  router.get("/cliente/:id", ventasController.obtenerVentasPorCliente);
 
   // Otros métodos permanecen iguales...
 
