@@ -23,23 +23,35 @@ class Venta {
     callback
   ) {
     const offset = (page - 1) * pageSize;
-    const searchQuery = `%${search}%`;
+    const searchQuery = search ? `%${search}%` : "%";
 
-    const queryVentas = `
-      SELECT v.venta_id, v.fecha_hora,v.numero_factura, c.nombre AS cliente_nombre, 
-      c.apellido AS cliente_apellido, u.nombre AS usuario_nombre,u.apellido AS usuario_apellido,
+    let queryVentas = `
+      SELECT v.venta_id, v.fecha_hora, v.numero_factura, c.nombre AS cliente_nombre, 
+      c.apellido AS cliente_apellido, u.nombre AS usuario_nombre, u.apellido AS usuario_apellido,
       v.total, v.total_sin_descuento, v.descuento
       FROM ventas v
-      JOIN clientes c ON v.cliente_id = c.cliente_id
-      JOIN usuarios u ON v.usuario_id = u.usuario_id
-      WHERE c.nombre LIKE ? OR u.nombre LIKE ?
-      ORDER BY v.fecha_hora DESC
-      LIMIT ? OFFSET ?
+      LEFT JOIN clientes c ON v.cliente_id = c.cliente_id
+      LEFT JOIN usuarios u ON v.usuario_id = u.usuario_id
+      WHERE 1=1
     `;
+    
+    // Solo agregar filtro de búsqueda si hay un término de búsqueda
+    if (search && search.trim() !== "") {
+      queryVentas += ` AND (c.nombre LIKE ? OR c.apellido LIKE ? OR u.nombre LIKE ? OR u.apellido LIKE ? OR v.numero_factura::text LIKE ?)`;
+    }
+    
+    queryVentas += ` ORDER BY v.fecha_hora DESC LIMIT ? OFFSET ?`;
 
+    // Construir parámetros según si hay búsqueda o no
+    const params = [];
+    if (search && search.trim() !== "") {
+      params.push(searchQuery, searchQuery, searchQuery, searchQuery, searchQuery);
+    }
+    params.push(pageSize, offset);
+    
     db.query(
       queryVentas,
-      [searchQuery, searchQuery, pageSize, offset],
+      params,
       (err, ventasResult) => {
         if (err) return callback(err);
 
