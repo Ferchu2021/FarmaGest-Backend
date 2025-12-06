@@ -11,6 +11,9 @@ module.exports = () => {
   // Obtener todas las categorías
   router.get("/categorias", productosController.obtenerCategorias);
 
+  // Obtener filtros (categorías y marcas)
+  router.get("/filtros", productosController.obtenerFiltros);
+
   // Agregar un nuevo producto
   router.post("/", productosController.agregarProducto);
 

@@ -22,17 +22,32 @@ class Producto {
     const searchQuery = search ? `%${search}%` : "%";
 
     let query = `
-      SELECT p.producto_id, p.nombre as Nombre, p.codigo as Codigo, p.marca as Marca, p.stock as Stock, p.precio as Precio, c.categoria_id, c.nombre as Categoria 
+      SELECT 
+        p.producto_id, 
+        p.nombre as "Nombre", 
+        p.codigo as "Codigo", 
+        p.marca as "Marca", 
+        p.stock as "Stock", 
+        p.precio as "Precio", 
+        c.categoria_id, 
+        c.nombre as "Categoria" 
       FROM productos as p
       LEFT JOIN categorias as c on c.categoria_id = p.categoria_id
-      WHERE p.deleted_at is NULL and (p.nombre LIKE ? OR p.codigo LIKE ? OR p.marca LIKE ?)
+      WHERE p.deleted_at IS NULL AND (p.nombre LIKE ? OR p.codigo LIKE ? OR p.marca LIKE ?)
     `;
     const params = [searchQuery, searchQuery, searchQuery];
     query += ` LIMIT ? OFFSET ?`;
     params.push(pageSize, offset);
 
     // La actualización de sesión ahora se maneja en el middleware de routes.js
-    return db.query(query, params, callback);
+    return db.query(query, params, (err, results) => {
+      if (err) {
+        return callback(err, null);
+      }
+      // PostgreSQL devuelve results.rows, MySQL devuelve results directamente
+      const rows = results.rows || results;
+      callback(null, rows);
+    });
   }
 
   static agregarProducto(nuevoProducto, usuario_id, callback) {
@@ -156,7 +171,55 @@ class Producto {
   }
 
   static obtenerCategorias(callback) {
-    return db.query("SELECT categoria_id, nombre FROM categorias", callback);
+    return db.query("SELECT categoria_id, nombre FROM categorias ORDER BY nombre", (err, results) => {
+      if (err) {
+        return callback(err, null);
+      }
+      // PostgreSQL devuelve results.rows, MySQL devuelve results directamente
+      const rows = results.rows || results;
+      callback(null, rows);
+    });
+  }
+
+  static obtenerFiltros(callback) {
+    // Obtener categorías
+    db.query(
+      "SELECT categoria_id, nombre FROM categorias ORDER BY nombre",
+      (err, categorias) => {
+        if (err) {
+          return callback(err, null);
+        }
+
+        // Obtener marcas únicas
+        db.query(
+          "SELECT DISTINCT marca FROM productos WHERE marca IS NOT NULL AND marca != '' AND deleted_at IS NULL ORDER BY marca",
+          (err, marcas) => {
+            if (err) {
+              return callback(err, null);
+            }
+
+            // Convertir resultados de PostgreSQL a formato esperado
+            const categoriasRows = categorias.rows || categorias;
+            const categoriasFormatted = categoriasRows.map((cat) => ({
+              categoria_id: cat.categoria_id,
+              nombre: cat.nombre,
+            }));
+
+            const marcasRows = marcas.rows || marcas;
+            // Convertir a array de strings para evitar problemas con React
+            const marcasFormatted = marcasRows
+              .map((m) => m.marca || m.Marca || "")
+              .filter((m) => m !== "")
+              .sort();
+
+            callback(null, {
+              categorias: categoriasFormatted,
+              marcas: marcasFormatted,
+            });
+          }
+        );
+      }
+    );
   }
 }
 

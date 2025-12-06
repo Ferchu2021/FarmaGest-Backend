@@ -111,7 +111,9 @@ const usuariosController = {
       if (err) {
         res.status(500).json({ mensaje: "Error al desloguear usuario" });
       } else {
-        if (resultado.affectedRows > 0) {
+        // PostgreSQL devuelve rowCount, MySQL devuelve affectedRows
+        const affectedRows = resultado.rowCount || resultado.affectedRows || 0;
+        if (affectedRows > 0) {
           res
             .status(200)
             .json({ mensaje: "Usuario deslogueado correctamente" });

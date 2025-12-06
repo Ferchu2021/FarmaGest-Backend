@@ -17,7 +17,9 @@ const productosController = {
           console.error("Error al obtener productos:", err);
           res.status(500).json({ mensaje: "Error al obtener productos" });
         } else {
-          res.json(productos);
+          // PostgreSQL devuelve { rows: [...], ... }, MySQL devuelve array directamente
+          const rows = productos.rows || productos;
+          res.json(rows);
         }
       }
     );
@@ -97,7 +99,20 @@ const productosController = {
         console.error("Error al obtener categorías:", err);
         res.status(500).json({ mensaje: "Error al obtener categorías" });
       } else {
-        res.json(categorias);
+        // PostgreSQL devuelve { rows: [...], ... }, MySQL devuelve array directamente
+        const rows = categorias.rows || categorias;
+        res.json(rows);
+      }
+    });
+  },
+
+  obtenerFiltros: (req, res) => {
+    Producto.obtenerFiltros((err, filtros) => {
+      if (err) {
+        console.error("Error al obtener filtros:", err);
+        res.status(500).json({ mensaje: "Error al obtener filtros" });
+      } else {
+        res.json(filtros);
       }
     });
   },

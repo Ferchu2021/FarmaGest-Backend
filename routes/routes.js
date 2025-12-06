@@ -7,7 +7,7 @@ router.use((req, res, next) => {
   if (!sesion) return next();
 
   db.query(
-    "UPDATE sesiones SET ultima_actividad = NOW() WHERE sesion_id = ?",
+    "UPDATE sesiones SET ultima_actividad = CURRENT_TIMESTAMP WHERE sesion_id = $1",
     [sesion],
     (err) => {
       if (err) {
