@@ -15,6 +15,8 @@ class Producto {
     pageSize = 6,
     search = "",
     sesion,
+    marca = null,
+    proveedorId = null,
     callback
   ) {
     const offset = (page - 1) * pageSize;
@@ -30,12 +32,28 @@ class Producto {
         p.stock as "Stock", 
         p.precio as "Precio", 
         c.categoria_id, 
-        c.nombre as "Categoria" 
+        c.nombre as "Categoria",
+        pr.proveedor_id,
+        pr.razon_social as "Proveedor"
       FROM productos as p
       LEFT JOIN categorias as c on c.categoria_id = p.categoria_id
+      LEFT JOIN proveedores as pr on pr.proveedor_id = p.proveedor_id
       WHERE p.deleted_at IS NULL AND (p.nombre LIKE ? OR p.codigo LIKE ? OR p.marca LIKE ?)
     `;
     const params = [searchQuery, searchQuery, searchQuery];
+    
+    // Agregar filtro por marca
+    if (marca && marca.trim() !== "") {
+      query += ` AND p.marca = ?`;
+      params.push(marca.trim());
+    }
+    
+    // Agregar filtro por proveedor
+    if (proveedorId && proveedorId > 0) {
+      query += ` AND p.proveedor_id = ?`;
+      params.push(parseInt(proveedorId));
+    }
+    
     query += ` LIMIT ? OFFSET ?`;
     params.push(pageSize, offset);
 
@@ -57,14 +75,15 @@ class Producto {
 
   static agregarProducto(nuevoProducto, usuario_id, callback) {
     db.query(
-      "INSERT INTO productos (nombre, codigo, marca, categoria_id, stock, precio) VALUES (?, ?, ?, ?, ?,?)",
+      "INSERT INTO productos (nombre, codigo, marca, categoria_id, stock, precio, proveedor_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
       [
         nuevoProducto.nombre,
         nuevoProducto.codigo,
         nuevoProducto.marca,
-        nuevoProducto.categoria_id,
+        nuevoProducto.categoria_id || null,
         nuevoProducto.stock,
         nuevoProducto.precio,
+        nuevoProducto.proveedor_id || null,
       ],
       (err, result) => {
         if (err) {
@@ -203,24 +222,45 @@ class Producto {
               return callback(err, null);
             }
 
-            // Convertir resultados de PostgreSQL a formato esperado
-            const categoriasRows = categorias.rows || categorias;
-            const categoriasFormatted = categoriasRows.map((cat) => ({
-              categoria_id: cat.categoria_id,
-              nombre: cat.nombre,
-            }));
+            // Obtener proveedores únicos de productos
+            db.query(
+              `SELECT DISTINCT pr.proveedor_id, pr.razon_social 
+               FROM productos p
+               INNER JOIN proveedores pr ON pr.proveedor_id = p.proveedor_id
+               WHERE p.deleted_at IS NULL AND p.proveedor_id IS NOT NULL
+               ORDER BY pr.razon_social`,
+              (err, proveedores) => {
+                if (err) {
+                  return callback(err, null);
+                }
 
-            const marcasRows = marcas.rows || marcas;
-            // Convertir a array de strings para evitar problemas con React
-            const marcasFormatted = marcasRows
-              .map((m) => m.marca || m.Marca || "")
-              .filter((m) => m !== "")
-              .sort();
+                // Convertir resultados de PostgreSQL a formato esperado
+                const categoriasRows = categorias.rows || categorias;
+                const categoriasFormatted = categoriasRows.map((cat) => ({
+                  categoria_id: cat.categoria_id,
+                  nombre: cat.nombre,
+                }));
 
-            callback(null, {
-              categorias: categoriasFormatted,
-              marcas: marcasFormatted,
-            });
+                const marcasRows = marcas.rows || marcas;
+                // Convertir a array de strings para evitar problemas con React
+                const marcasFormatted = marcasRows
+                  .map((m) => m.marca || m.Marca || "")
+                  .filter((m) => m !== "")
+                  .sort();
+
+                const proveedoresRows = proveedores.rows || proveedores;
+                const proveedoresFormatted = proveedoresRows.map((prov) => ({
+                  proveedor_id: prov.proveedor_id,
+                  razon_social: prov.razon_social || "",
+                }));
+
+                callback(null, {
+                  categorias: categoriasFormatted,
+                  marcas: marcasFormatted,
+                  proveedores: proveedoresFormatted,
+                });
+              }
+            );
           }
         );
       }

@@ -20,38 +20,38 @@ class VentasPorFechaStrategy extends ReporteStrategy {
     if (dateSelectedFrom && dateSelectedTo) {
       // Si se proporciona la fecha de fin, selecciona ventas entre las fechas de inicio y fin.
       queryVentasPorFecha = `
-                SELECT DATE(v.fecha_hora) AS fecha, COUNT(*) AS cantidad_ventas, SUM(v.total) AS monto_total
+                SELECT v.fecha_hora::date AS fecha, COUNT(*) AS cantidad_ventas, SUM(v.total) AS monto_total
                 FROM ventas v
-                WHERE DATE(v.fecha_hora) BETWEEN DATE(?) AND DATE(?)
-                GROUP BY DATE(v.fecha_hora)
+                WHERE v.fecha_hora::date BETWEEN $1::date AND $2::date
+                GROUP BY v.fecha_hora::date
                 ORDER BY fecha DESC;
             `;
       params.push(dateSelectedFrom, dateSelectedTo);
     } else if (dateSelectedFrom) {
       // Si no se proporciona la fecha de fin, selecciona ventas desde la fecha de inicio hasta la fecha actual.
       queryVentasPorFecha = `
-                SELECT DATE(v.fecha_hora) AS fecha, COUNT(*) AS cantidad_ventas, SUM(v.total) AS monto_total
+                SELECT v.fecha_hora::date AS fecha, COUNT(*) AS cantidad_ventas, SUM(v.total) AS monto_total
                 FROM ventas v
-                WHERE DATE(v.fecha_hora) >= DATE(?)
-                GROUP BY DATE(v.fecha_hora)
+                WHERE v.fecha_hora::date >= $1::date
+                GROUP BY v.fecha_hora::date
                 ORDER BY fecha DESC;
             `;
       params.push(dateSelectedFrom);
     } else if (dateSelectedTo) {
       // Si no se proporciona la fecha de fin, selecciona ventas desde la fecha de inicio hasta la fecha actual.
       queryVentasPorFecha = `
-                SELECT DATE(v.fecha_hora) AS fecha, COUNT(*) AS cantidad_ventas, SUM(v.total) AS monto_total
+                SELECT v.fecha_hora::date AS fecha, COUNT(*) AS cantidad_ventas, SUM(v.total) AS monto_total
                 FROM ventas v
-                WHERE DATE(v.fecha_hora) <= DATE(?)
-                GROUP BY DATE(v.fecha_hora)
+                WHERE v.fecha_hora::date <= $1::date
+                GROUP BY v.fecha_hora::date
                 ORDER BY fecha DESC;
             `;
       params.push(dateSelectedTo);
     } else {
       queryVentasPorFecha = `
-                SELECT DATE(v.fecha_hora) AS fecha, COUNT(*) AS cantidad_ventas, SUM(v.total) AS monto_total
+                SELECT v.fecha_hora::date AS fecha, COUNT(*) AS cantidad_ventas, SUM(v.total) AS monto_total
                 FROM ventas v
-                GROUP BY DATE(v.fecha_hora)
+                GROUP BY v.fecha_hora::date
                 ORDER BY fecha DESC 
                 LIMIT 10;
             `;
@@ -59,8 +59,13 @@ class VentasPorFechaStrategy extends ReporteStrategy {
 
     // Ejecuta la consulta en la base de datos y maneja el resultado o el error.
     db.query(queryVentasPorFecha, params, (err, resultados) => {
-      if (err) return callback(err);
-      callback(null, resultados);
+      if (err) {
+        console.error("Error en consulta de reportes:", err);
+        return callback(err);
+      }
+      // PostgreSQL devuelve results.rows, MySQL devuelve results directamente
+      const rows = resultados.rows || resultados;
+      callback(null, Array.isArray(rows) ? rows : []);
     });
   }
 }

@@ -16,7 +16,9 @@ const auditoriaClientesController = {
             .status(500)
             .json({ mensaje: "Error al obtener auditoria clientes" });
         } else {
-          res.json(auditoriaClientes);
+          // Asegurarse de que siempre devuelva un array
+          const rows = Array.isArray(auditoriaClientes) ? auditoriaClientes : [];
+          res.json(rows);
         }
       }
     );

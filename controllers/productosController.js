@@ -6,12 +6,16 @@ const productosController = {
     const pageSize = parseInt(req.query.pageSize) || 99;
     const search = req.query.search || "";
     const sesion = req.query.sesion;
+    const marca = req.query.marca || null;
+    const proveedorId = req.query.proveedorId || null;
 
     Producto.obtenerProductos(
       page,
       pageSize,
       search,
       sesion,
+      marca,
+      proveedorId,
       (err, productos) => {
         if (err) {
           console.error("Error al obtener productos:", err);
@@ -32,7 +36,7 @@ const productosController = {
   },
 
   agregarProducto: (req, res) => {
-    const { nombre, codigo, marca, categoria_id, stock, precio, usuario_id } =
+    const { nombre, codigo, marca, categoria_id, stock, precio, usuario_id, proveedor_id } =
       req.body;
 
     const nuevoProducto = new Producto(
@@ -43,6 +47,7 @@ const productosController = {
       stock,
       precio
     );
+    nuevoProducto.proveedor_id = proveedor_id || null;
 
     Producto.agregarProducto(nuevoProducto, usuario_id, (err, resultado) => {
       if (err) {
