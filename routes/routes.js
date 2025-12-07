@@ -16,6 +16,7 @@ router.get("/", (req, res) => {
       obrasSociales: "/api/obras-sociales",
       reportes: "/api/reportes",
       sesiones: "/api/sesiones",
+      lotes: "/api/lotes",
       auth: "/api/auth"
     }
   });
@@ -48,6 +49,7 @@ const obrasSocialesRoutes = require("./obrasSocialesRoute.js");
 const ventasRoutes = require("./ventasRoute.js");
 const reportesRoutes = require("./reportesRoute.js");
 const sesionesRoutes = require("./sesionesRoute.js");
+const lotesRoutes = require("./lotesRoute.js");
 const authRoutes = require("./authRoute.js");
 const indexesRoute = require("./indexesRoute.js");
 
@@ -62,6 +64,7 @@ router.use("/auditoria-clientes/", auditoriaClientesRoutes());
 router.use("/auditoria-obras-sociales/", auditoriaObrasSocialesRoutes());
 router.use("/obras-sociales/", obrasSocialesRoutes());
 router.use("/sesiones/", sesionesRoutes());
+router.use("/lotes/", lotesRoutes());
 
 router.use("/auth/", authRoutes);
 
