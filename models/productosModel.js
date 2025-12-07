@@ -74,31 +74,52 @@ class Producto {
   }
 
   static agregarProducto(nuevoProducto, usuario_id, callback) {
+    // Si viene precio_compra_base, el trigger calculará automáticamente el precio
+    // Si viene precio, necesitamos calcular precio_compra_base
+    let precioFinal = nuevoProducto.precio;
+    let precioCompraBase = nuevoProducto.precio_compra_base;
+    
+    // Si no viene precio_compra_base pero viene precio, calcularlo en reversa
+    if (!precioCompraBase && precioFinal) {
+      const esMedicamento = nuevoProducto.es_medicamento || false;
+      const porcentajeIVA = nuevoProducto.porcentaje_iva || 21;
+      const porcentajeGanancia = esMedicamento ? 25 : 30;
+      const precioConGananciaEIVA = (1 + porcentajeGanancia / 100) * (1 + porcentajeIVA / 100);
+      precioCompraBase = precioFinal / precioConGananciaEIVA;
+    }
+    
     db.query(
-      "INSERT INTO productos (nombre, codigo, marca, categoria_id, stock, precio, proveedor_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      `INSERT INTO productos (nombre, codigo, marca, categoria_id, stock, precio, proveedor_id, 
+       precio_compra_base, es_medicamento, porcentaje_iva) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
       [
         nuevoProducto.nombre,
         nuevoProducto.codigo,
         nuevoProducto.marca,
         nuevoProducto.categoria_id || null,
         nuevoProducto.stock,
-        nuevoProducto.precio,
+        precioFinal,
         nuevoProducto.proveedor_id || null,
+        precioCompraBase || null,
+        nuevoProducto.es_medicamento || false,
+        nuevoProducto.porcentaje_iva || 21,
       ],
       (err, result) => {
         if (err) {
           return callback(err, null);
         }
+        const productoId = result.rows ? result.rows[0].producto_id : result.insertId;
         db.query(
-          `INSERT INTO auditoria_productos (producto_id, accion, detalle_cambio, fecha_movimiento, usuario_id) VALUES (?, 'CREAR', 'Se ha creado un nuevo producto ${nuevoProducto.nombre} → Código ${nuevoProducto.codigo}', NOW(), ?)`,
-          [result.insertId, usuario_id], // usuario_id por defecto 1 si no está disponible
+          `INSERT INTO auditoria_productos (producto_id, accion, detalle_cambio, fecha_movimiento, usuario_id) VALUES ($1, 'CREAR', $2, NOW(), $3)`,
+          [productoId, `Se ha creado un nuevo producto ${nuevoProducto.nombre} → Código ${nuevoProducto.codigo}`, usuario_id],
           (err) => {
             if (err) {
               console.error("Error al registrar en auditoría:", err);
             }
           }
         );
-        callback(null, { id: result.insertId, ...nuevoProducto });
+        const id = result.rows ? result.rows[0].producto_id : result.insertId;
+        callback(null, { id, ...nuevoProducto });
       }
     );
   }
@@ -140,16 +161,40 @@ class Producto {
           detalle_cambio += `Precio: ${productoActual.precio} → ${producto.precio}; `;
         }
 
+        // Calcular precio si se actualiza precio_compra_base
+        let precioFinal = producto.precio;
+        if (producto.precio_compra_base !== undefined) {
+          const esMedicamento = producto.es_medicamento !== undefined ? producto.es_medicamento : productoActual.es_medicamento;
+          const porcentajeIVA = producto.porcentaje_iva !== undefined ? producto.porcentaje_iva : (productoActual.porcentaje_iva || 21);
+          // El trigger calculará automáticamente el precio, pero podemos pre-calcularlo
+          const porcentajeGanancia = esMedicamento ? 25 : 30;
+          const precioConGanancia = producto.precio_compra_base * (1 + porcentajeGanancia / 100);
+          precioFinal = precioConGanancia * (1 + porcentajeIVA / 100);
+        }
+
         // 4️⃣ Ejecutar la actualización en la base de datos
         db.query(
-          "UPDATE productos SET nombre = ?, codigo = ?, marca = ?, categoria_id = ?, stock = ?, precio = ? WHERE producto_id = ?",
+          `UPDATE productos SET 
+            nombre = $1, 
+            codigo = $2, 
+            marca = $3, 
+            categoria_id = $4, 
+            stock = $5, 
+            precio = $6,
+            precio_compra_base = COALESCE($7, precio_compra_base),
+            es_medicamento = COALESCE($8, es_medicamento),
+            porcentaje_iva = COALESCE($9, porcentaje_iva)
+            WHERE producto_id = $10`,
           [
             producto.nombre,
             producto.codigo,
             producto.marca,
-            producto.categoria_id,
+            producto.categoria_id || null,
             producto.stock,
-            producto.precio,
+            precioFinal,
+            producto.precio_compra_base !== undefined ? producto.precio_compra_base : null,
+            producto.es_medicamento !== undefined ? producto.es_medicamento : null,
+            producto.porcentaje_iva !== undefined ? producto.porcentaje_iva : null,
             parseInt(producto_id),
           ],
           callback

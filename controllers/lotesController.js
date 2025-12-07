@@ -103,17 +103,50 @@ const lotesController = {
     }
   },
 
-  obtenerPerdidasVencimientos: (req, res) => {
+  obtenerPerdidasVencimientos: async (req, res) => {
     try {
       const fechaDesde = req.query.fechaDesde || null;
       const fechaHasta = req.query.fechaHasta || null;
+      const incluirDetalle = req.query.incluirDetalle === 'true';
 
-      Lote.obtenerPerdidasVencimientos(fechaDesde, fechaHasta, (err, perdidas) => {
+      Lote.obtenerPerdidasVencimientos(fechaDesde, fechaHasta, async (err, perdidas) => {
         if (err) {
           console.error("Error al obtener pérdidas:", err);
           return res.status(500).json({ mensaje: "Error al obtener pérdidas por vencimientos" });
         }
         const rows = perdidas.rows || perdidas || [];
+        
+        // Si se solicita detalle, obtener también los lotes vencidos
+        if (incluirDetalle) {
+          const db = require("../db");
+          let detalleQuery = `SELECT * FROM v_detalle_lotes_vencidos WHERE 1=1`;
+          const params = [];
+          let paramIndex = 1;
+          
+          if (fechaDesde) {
+            detalleQuery += ` AND fecha_vencimiento >= $${paramIndex}`;
+            params.push(fechaDesde);
+            paramIndex++;
+          }
+          if (fechaHasta) {
+            detalleQuery += ` AND fecha_vencimiento <= $${paramIndex}`;
+            params.push(fechaHasta);
+            paramIndex++;
+          }
+          detalleQuery += ` ORDER BY fecha_vencimiento ASC`;
+          
+          try {
+            const detalleResult = await db.query(detalleQuery, params);
+            return res.json({
+              resumen: rows,
+              detalle: detalleResult.rows || []
+            });
+          } catch (detalleErr) {
+            console.error("Error al obtener detalle:", detalleErr);
+            return res.json({ resumen: rows, detalle: [] });
+          }
+        }
+        
         res.json(rows);
       });
     } catch (error) {
