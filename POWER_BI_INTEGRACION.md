@@ -49,6 +49,34 @@ Para mejor rendimiento, usa las **vistas optimizadas** creadas específicamente 
    - Ventas agrupadas por período
    - Optimizada para análisis temporal y dashboards
 
+6. **`v_power_bi_lotes`** ⭐ NUEVO
+   - Análisis completo de lotes con información de vencimientos
+   - Incluye cálculos de días hasta vencimiento, pérdidas potenciales y nivel de alerta
+   - Optimizada para control de inventario y alertas de vencimientos
+
+7. **`v_power_bi_vencimientos_mensual`** ⭐ NUEVO
+   - Análisis mensual de vencimientos y pérdidas
+   - Incluye lotes vencidos, por vencer y valor en riesgo
+   - Optimizada para reportes de pérdidas y predicciones
+
+8. **`v_power_bi_productos_inventario`** ⭐ NUEVO
+   - Productos con estadísticas de lotes y ventas
+   - Incluye información de categorías, proveedores y movimientos
+   - Optimizada para análisis de inventario y optimización de stock
+
+9. **`v_power_bi_movimientos_lotes`** ⭐ NUEVO
+   - Movimientos de lotes con desglose temporal
+   - Incluye entradas, salidas y ajustes con trazabilidad
+   - Optimizada para auditoría de inventario
+
+10. **`v_resumen_perdidas_vencimientos`**
+    - Resumen de pérdidas económicas por vencimientos
+    - Agrupado por mes con métricas clave
+
+11. **`v_detalle_lotes_vencidos`**
+    - Detalle completo de lotes vencidos
+    - Incluye información de productos y proveedores
+
 ### Paso 4: Crear Modelo de Datos
 
 1. **Importar todas las vistas recomendadas**
@@ -106,6 +134,30 @@ CALCULATE(
 - **Tabla**: Productos más vendidos
 - **Gráfico de barras**: Productos por categoría
 - **Indicador**: Nivel de stock promedio
+
+#### ⚠️ Dashboard 4: Control de Vencimientos ⭐ NUEVO
+
+**Visualizaciones sugeridas:**
+- **Tarjeta**: Lotes vencidos (cantidad y valor)
+- **Tarjeta**: Lotes por vencer en 30 días
+- **Gráfico de barras**: Pérdidas económicas por mes
+- **Tabla**: Top productos con más lotes vencidos
+- **Gráfico de líneas**: Tendencia de vencimientos
+- **Matriz**: Lotes por producto y fecha de vencimiento
+
+**Vistas recomendadas:**
+- `v_power_bi_lotes` - Para análisis detallado
+- `v_power_bi_vencimientos_mensual` - Para tendencias
+- `v_resumen_perdidas_vencimientos` - Para métricas financieras
+- `v_detalle_lotes_vencidos` - Para análisis específico
+
+#### 📊 Dashboard 5: Análisis de Lotes ⭐ NUEVO
+
+**Visualizaciones sugeridas:**
+- **Gráfico de dispersión**: Valor vs Días hasta vencimiento
+- **Mapa de árbol**: Lotes por categoría y proveedor
+- **Tabla**: Movimientos de lotes recientes
+- **Gráfico de barras**: Valor de inventario por proveedor
 
 ## 🔄 Actualización de Datos
 
