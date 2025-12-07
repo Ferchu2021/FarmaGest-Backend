@@ -17,7 +17,8 @@ router.get("/", (req, res) => {
       reportes: "/api/reportes",
       sesiones: "/api/sesiones",
       lotes: "/api/lotes",
-      auth: "/api/auth"
+      auth: "/api/auth",
+      notificacionesIA: "/api/notificaciones-ia"
     }
   });
 });
@@ -52,6 +53,7 @@ const sesionesRoutes = require("./sesionesRoute.js");
 const lotesRoutes = require("./lotesRoute.js");
 const authRoutes = require("./authRoute.js");
 const indexesRoute = require("./indexesRoute.js");
+const notificacionesIARoutes = require("./notificacionesIARoute.js");
 
 router.use("/reportes/", reportesRoutes());
 router.use("/ventas/", ventasRoutes());
@@ -65,6 +67,7 @@ router.use("/auditoria-obras-sociales/", auditoriaObrasSocialesRoutes());
 router.use("/obras-sociales/", obrasSocialesRoutes());
 router.use("/sesiones/", sesionesRoutes());
 router.use("/lotes/", lotesRoutes());
+router.use("/notificaciones-ia/", notificacionesIARoutes());
 
 router.use("/auth/", authRoutes);
 

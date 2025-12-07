@@ -76,8 +76,8 @@ class Producto {
   static agregarProducto(nuevoProducto, usuario_id, callback) {
     // Si viene precio_compra_base, el trigger calculará automáticamente el precio
     // Si viene precio, necesitamos calcular precio_compra_base
-    let precioFinal = nuevoProducto.precio;
-    let precioCompraBase = nuevoProducto.precio_compra_base;
+    let precioFinal = nuevoProducto.precio ? Math.round(parseFloat(nuevoProducto.precio) * 100) / 100 : 0;
+    let precioCompraBase = nuevoProducto.precio_compra_base ? Math.round(parseFloat(nuevoProducto.precio_compra_base) * 100) / 100 : null;
     
     // Si no viene precio_compra_base pero viene precio, calcularlo en reversa
     if (!precioCompraBase && precioFinal) {
@@ -85,8 +85,11 @@ class Producto {
       const porcentajeIVA = nuevoProducto.porcentaje_iva || 21;
       const porcentajeGanancia = esMedicamento ? 25 : 30;
       const precioConGananciaEIVA = (1 + porcentajeGanancia / 100) * (1 + porcentajeIVA / 100);
-      precioCompraBase = precioFinal / precioConGananciaEIVA;
+      precioCompraBase = Math.round((precioFinal / precioConGananciaEIVA) * 100) / 100;
     }
+    
+    // Redondear porcentaje_iva a 2 decimales
+    const porcentajeIVA = nuevoProducto.porcentaje_iva ? Math.round(parseFloat(nuevoProducto.porcentaje_iva) * 100) / 100 : 21;
     
     db.query(
       `INSERT INTO productos (nombre, codigo, marca, categoria_id, stock, precio, proveedor_id, 
@@ -100,9 +103,9 @@ class Producto {
         nuevoProducto.stock,
         precioFinal,
         nuevoProducto.proveedor_id || null,
-        precioCompraBase || null,
+        precioCompraBase,
         nuevoProducto.es_medicamento || false,
-        nuevoProducto.porcentaje_iva || 21,
+        porcentajeIVA,
       ],
       (err, result) => {
         if (err) {
@@ -162,15 +165,25 @@ class Producto {
         }
 
         // Calcular precio si se actualiza precio_compra_base
-        let precioFinal = producto.precio;
+        let precioFinal = producto.precio ? Math.round(parseFloat(producto.precio) * 100) / 100 : productoActual.precio;
         if (producto.precio_compra_base !== undefined) {
           const esMedicamento = producto.es_medicamento !== undefined ? producto.es_medicamento : productoActual.es_medicamento;
           const porcentajeIVA = producto.porcentaje_iva !== undefined ? producto.porcentaje_iva : (productoActual.porcentaje_iva || 21);
           // El trigger calculará automáticamente el precio, pero podemos pre-calcularlo
           const porcentajeGanancia = esMedicamento ? 25 : 30;
-          const precioConGanancia = producto.precio_compra_base * (1 + porcentajeGanancia / 100);
-          precioFinal = precioConGanancia * (1 + porcentajeIVA / 100);
+          const precioCompraBase = Math.round(parseFloat(producto.precio_compra_base) * 100) / 100;
+          const precioConGanancia = precioCompraBase * (1 + porcentajeGanancia / 100);
+          precioFinal = Math.round((precioConGanancia * (1 + porcentajeIVA / 100)) * 100) / 100;
         }
+        
+        // Redondear valores antes de guardar
+        precioFinal = Math.round(parseFloat(precioFinal) * 100) / 100;
+        const precioCompraBaseActualizado = producto.precio_compra_base !== undefined 
+          ? Math.round(parseFloat(producto.precio_compra_base) * 100) / 100 
+          : null;
+        const porcentajeIVAActualizado = producto.porcentaje_iva !== undefined 
+          ? Math.round(parseFloat(producto.porcentaje_iva) * 100) / 100 
+          : null;
 
         // 4️⃣ Ejecutar la actualización en la base de datos
         db.query(
@@ -192,9 +205,9 @@ class Producto {
             producto.categoria_id || null,
             producto.stock,
             precioFinal,
-            producto.precio_compra_base !== undefined ? producto.precio_compra_base : null,
+            precioCompraBaseActualizado,
             producto.es_medicamento !== undefined ? producto.es_medicamento : null,
-            producto.porcentaje_iva !== undefined ? producto.porcentaje_iva : null,
+            porcentajeIVAActualizado,
             parseInt(producto_id),
           ],
           callback
