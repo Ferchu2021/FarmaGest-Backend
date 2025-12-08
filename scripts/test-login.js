@@ -14,8 +14,8 @@ const pool = new Pool({
 });
 
 async function testLogin() {
-  const correo = "admin@farmagest.com";
-  const contrasena = "Admin2024!";
+  const correo = process.env.TEST_EMAIL || "admin@farmagest.com";
+  const contrasena = process.env.TEST_PASSWORD || "Admin2024!";
 
   console.log(`🔐 Probando login para: ${correo}`);
   console.log(`   Contraseña: ${contrasena}\n`);
@@ -63,7 +63,7 @@ async function testLogin() {
       console.log("❌ Contraseña incorrecta!");
       console.log("   Intentando con otras contraseñas...");
       
-      const passwords = ["admin123", "Admin2024!", "Admin2024"];
+      const passwords = process.env.TEST_PASSWORDS ? process.env.TEST_PASSWORDS.split(',') : ["admin123", "Admin2024!", "Admin2024"];
       for (const pwd of passwords) {
         const testMatch = await bcrypt.compare(pwd, usuario.contrasena);
         if (testMatch) {
@@ -94,6 +94,7 @@ async function testLogin() {
 }
 
 testLogin();
+
 
 
 

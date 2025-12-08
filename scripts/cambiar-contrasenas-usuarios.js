@@ -223,7 +223,7 @@ async function main() {
           "\n❌ No se encontró un usuario administrador (busca correos con 'admin')"
         );
       } else {
-        const nuevaContrasena = "admin123";
+        const nuevaContrasena = process.env.ADMIN_PASSWORD || "admin123";
         console.log(
           `\n⏳ Restableciendo contraseña del administrador a '${nuevaContrasena}'...`
         );
@@ -255,6 +255,7 @@ async function main() {
 }
 
 main();
+
 
 
 

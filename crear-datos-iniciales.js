@@ -57,8 +57,8 @@ async function crearDatosIniciales() {
     
     // 3. Crear usuario administrador
     console.log("\n2. Creando usuario administrador...");
-    const adminEmail = "admin@farmagest.com";
-    const adminPassword = "admin123"; // Contraseña por defecto
+    const adminEmail = process.env.ADMIN_EMAIL || "admin@farmagest.com";
+    const adminPassword = process.env.ADMIN_PASSWORD || "admin123"; // Contraseña por defecto (configurable mediante ADMIN_PASSWORD)
     
     const checkAdmin = await client.query(
       "SELECT usuario_id FROM usuarios WHERE correo = $1",
@@ -113,8 +113,8 @@ async function crearDatosIniciales() {
     console.log("\n📋 Resumen:");
     console.log("   - Roles creados: Administrador, Vendedor, Gerente");
     console.log("   - Usuario administrador:");
-    console.log("     Email: admin@farmagest.com");
-    console.log("     Contraseña: admin123");
+    console.log(`     Email: ${adminEmail}`);
+    console.log(`     Contraseña: ${adminPassword}`);
     console.log("   - Categorías básicas creadas");
     console.log("\n🚀 Ahora puedes iniciar sesión en el frontend!");
     
@@ -130,6 +130,7 @@ async function crearDatosIniciales() {
 }
 
 crearDatosIniciales();
+
 
 
 

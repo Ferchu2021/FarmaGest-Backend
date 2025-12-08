@@ -5,10 +5,10 @@ require("dotenv").config();
 const Usuario = require("../models/usuariosModel");
 
 // Primero hacer login para obtener un session_id válido
-const correo = "admin@farmagest.com";
-const contrasena = "Admin2024!";
-const ip_address = "127.0.0.1";
-const user_agent = "Test Agent";
+const correo = process.env.TEST_EMAIL || "admin@farmagest.com";
+const contrasena = process.env.TEST_PASSWORD || "Admin2024!";
+const ip_address = process.env.TEST_IP || "127.0.0.1";
+const user_agent = process.env.TEST_USER_AGENT || "Test Agent";
 
 console.log("🔐 Probando login y logout...\n");
 
@@ -45,6 +45,7 @@ Usuario.validarUsuarioLogin(
     });
   }
 );
+
 
 
 
