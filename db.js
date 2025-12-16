@@ -101,39 +101,29 @@ class Database {
    * @returns {Object} Query convertida y parámetros
    */
   convertMySQLToPostgreSQL(query, params = []) {
-    if (!query || typeof query !== 'string') {
-      return { query: query, params: params || [] };
-    }
-
-    // Validar que no haya recursión (si el query ya tiene placeholders de PostgreSQL, no convertir)
-    if (query.includes('$1') || query.includes('$2')) {
-      // Ya está en formato PostgreSQL, retornar tal cual
-      return { query: query, params: params || [] };
-    }
-
     let convertedQuery = query;
     const convertedParams = [];
 
-    // Convertir funciones específicas de MySQL ANTES de reemplazar los placeholders
+    // Reemplazar ? con $1, $2, $3, etc.
+    let paramIndex = 1;
+    convertedQuery = convertedQuery.replace(/\?/g, () => {
+      convertedParams.push(params[paramIndex - 1]);
+      return `$${paramIndex++}`;
+    });
+
+    // Convertir funciones específicas de MySQL
     convertedQuery = convertedQuery.replace(/NOW\(\)/gi, "CURRENT_TIMESTAMP");
+    convertedQuery = convertedQuery.replace(/LIMIT \? OFFSET \?/gi, "LIMIT $1 OFFSET $2");
     
-    // Convertir DATE() a PostgreSQL (PostgreSQL soporta DATE() igual)
-    // No necesitamos cambiar nada aquí
+    // Convertir DATE() a PostgreSQL
+    convertedQuery = convertedQuery.replace(/DATE\(([^)]+)\)/gi, "DATE($1)");
 
     // Convertir GROUP_CONCAT (MySQL) a STRING_AGG (PostgreSQL)
     convertedQuery = convertedQuery.replace(/GROUP_CONCAT\(([^)]+)\)/gi, "STRING_AGG($1, ', ')");
 
-    // Reemplazar ? con $1, $2, $3, etc. de forma simple
-    const paramCount = (query.match(/\?/g) || []).length;
-    for (let i = 0; i < paramCount && i < (params || []).length; i++) {
-      convertedParams.push(params[i]);
-      // Reemplazar solo el primer ? encontrado
-      convertedQuery = convertedQuery.replace('?', `$${i + 1}`);
-    }
-
     return {
       query: convertedQuery,
-      params: convertedParams.length > 0 ? convertedParams : (params || [])
+      params: convertedParams.length > 0 ? convertedParams : params
     };
   }
 
@@ -168,11 +158,10 @@ class Database {
 // Crear instancia única
 const instance = new Database();
 
-// Exportar instancia completa, no solo el pool, para evitar recursión
-module.exports = {
-  pool: instance.pool,
-  query: instance.query.bind(instance),
-  getConnection: instance.getConnection.bind(instance),
-  getClient: instance.getClient.bind(instance),
-  transaction: instance.transaction.bind(instance)
-};
+// Exportar tanto el pool como métodos compatibles
+module.exports = instance.getConnection();
+module.exports.query = instance.query.bind(instance);
+module.exports.getConnection = instance.getConnection.bind(instance);
+module.exports.getClient = instance.getClient.bind(instance);
+module.exports.transaction = instance.transaction.bind(instance);
+module.exports.pool = instance.pool;

@@ -26,3 +26,10 @@ SELECT
 FROM productos 
 WHERE deleted_at IS NULL;
 
+
+
+
+
+
+
+

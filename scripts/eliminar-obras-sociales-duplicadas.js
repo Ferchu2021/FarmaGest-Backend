@@ -210,3 +210,10 @@ setTimeout(() => {
   verificarResultados();
 }, 5000);
 
+
+
+
+
+
+
+

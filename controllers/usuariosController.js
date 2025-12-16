@@ -19,15 +19,7 @@ const usuariosController = {
         if (err) {
           res.status(500).json({ mensaje: "Error al obtener usuarios" });
         } else {
-          // PostgreSQL devuelve { rows: [...], ... }, MySQL devuelve array directamente
-          const rows = usuarios.rows || usuarios;
-          // Asegurarse de que rows es un array
-          if (Array.isArray(rows)) {
-            res.json(rows);
-          } else {
-            console.error("Error: usuarios no es un array:", typeof usuarios, usuarios);
-            res.status(500).json({ mensaje: "Error: formato de respuesta inválido" });
-          }
+          res.json(usuarios);
         }
       }
     );
@@ -119,9 +111,7 @@ const usuariosController = {
       if (err) {
         res.status(500).json({ mensaje: "Error al desloguear usuario" });
       } else {
-        // PostgreSQL devuelve rowCount, MySQL devuelve affectedRows
-        const affectedRows = resultado.rowCount || resultado.affectedRows || 0;
-        if (affectedRows > 0) {
+        if (resultado.affectedRows > 0) {
           res
             .status(200)
             .json({ mensaje: "Usuario deslogueado correctamente" });

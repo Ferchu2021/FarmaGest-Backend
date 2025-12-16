@@ -40,14 +40,7 @@ class Usuario {
     params.push(pageSize, offset);
     
     // La actualización de sesión ahora se maneja en el middleware de routes.js
-    return db.query(query, params, (err, results) => {
-      if (err) {
-        return callback(err, null);
-      }
-      // PostgreSQL devuelve results.rows, MySQL devuelve results directamente
-      const rows = results.rows || results;
-      callback(null, rows);
-    });
+    return db.query(query, params, callback);
   }
   static agregarUsuario(nuevoUsuario, callback) {
     // Primero, verifica si el correo ya está registrado
@@ -130,21 +123,14 @@ class Usuario {
   }
   static logoutUsuario(sessionId, callback) {
     return db.query(
-      `UPDATE sesiones SET hora_logout = CURRENT_TIMESTAMP WHERE sesion_id = $1`,
+      `UPDATE sesiones SET hora_logout = NOW() WHERE sesion_id = ?`,
       [sessionId],
       (err, resultado) => {
         if (err) {
           console.error("Error al desloguear usuario:", err);
           return callback(err);
         } else {
-          // PostgreSQL devuelve rowCount, MySQL devuelve affectedRows
-          const affectedRows = resultado.rowCount || resultado.affectedRows || 0;
-          const mysqlFormatResult = {
-            ...resultado,
-            affectedRows: affectedRows,
-            rowCount: affectedRows
-          };
-          return callback(null, mysqlFormatResult);
+          return callback(null, resultado);
         }
       }
     );
@@ -157,7 +143,6 @@ class Usuario {
     user_agent,
     callback
   ) {
-    // Query compatible con PostgreSQL - usar STRING_AGG en lugar de GROUP_CONCAT
     db.query(
       `
       SELECT 
@@ -169,7 +154,7 @@ class Usuario {
         u.rol_id,
         r.rol, 
         u.contrasena,  
-        COALESCE(STRING_AGG(p.permiso, ', '), '') as permisos
+        GROUP_CONCAT(p.permiso) as permisos
       FROM 
         usuarios as u
       LEFT JOIN 
@@ -179,27 +164,23 @@ class Usuario {
       LEFT JOIN 
         permisos as p on p.permiso_id = rp.permiso_id
       WHERE 
-        u.correo = ? AND u.deleted_at IS NULL
+        u.correo = ?
       GROUP BY 
-        u.usuario_id, u.nombre, u.apellido, u.correo, u.estado, u.rol_id, r.rol, u.contrasena;
+        u.usuario_id, u.nombre, u.apellido, u.correo, u.estado, u.rol_id;
       `,
       [correo],
       (err, results) => {
         if (err) {
-          console.error("Error en query de login:", err);
           return callback(err);
         }
 
-        // PostgreSQL devuelve results.rows, no results directamente
-        const rows = results.rows || results;
-        
-        if (!rows || rows.length === 0) {
+        if (results.length === 0) {
           // No se encontró el usuario
           return callback(new Error("Correo o contraseña incorrectos"));
         }
 
         // Usuario encontrado, compara la contraseña encriptada
-        const usuario = rows[0];
+        const usuario = results[0];
 
         bcrypt.compare(contrasena, usuario.contrasena, (err, match) => {
           if (err) {
@@ -214,8 +195,8 @@ class Usuario {
           // Cerrar cualquier sesión activa antes de insertar una nueva
           db.query(
             `UPDATE sesiones 
-   SET hora_logout = CURRENT_TIMESTAMP 
-   WHERE correo_usuario = $1 AND hora_logout IS NULL`,
+   SET hora_logout = NOW() 
+   WHERE correo_usuario = ? AND hora_logout IS NULL`,
             [correo],
             (err, resultado) => {
               if (err) {
@@ -226,7 +207,7 @@ class Usuario {
               // Insertar la nueva sesión
               db.query(
                 `INSERT INTO sesiones (sesion_id, correo_usuario, navegador, ip, hora_logueo, ultima_actividad, hora_logout)
-                  VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NULL)`,
+                  VALUES (?, ?, ?, ?, NOW(), NOW(), NULL)`,
                 [sessionId, correo, user_agent, ip_address],
                 (err, resultado) => {
                   if (err) {
@@ -239,16 +220,6 @@ class Usuario {
           );
 
           // Contraseña correcta, retorna los detalles del usuario
-          // Convertir permisos de string a array si es necesario
-          let permisosArray = [];
-          if (usuario.permisos) {
-            if (typeof usuario.permisos === 'string' && usuario.permisos.trim() !== '') {
-              permisosArray = usuario.permisos.split(', ').filter(p => p.trim() !== '');
-            } else if (Array.isArray(usuario.permisos)) {
-              permisosArray = usuario.permisos;
-            }
-          }
-
           callback(null, {
             usuario_id: usuario.usuario_id,
             nombre: usuario.nombre,
@@ -257,7 +228,7 @@ class Usuario {
             estado: usuario.estado,
             rol_id: usuario.rol_id,
             rol: usuario.rol,
-            permisos: permisosArray,
+            permisos: usuario.permisos,
             sesion_id: sessionId,
           });
         });
@@ -267,15 +238,11 @@ class Usuario {
 
   static obtenerRoles(callback) {
     return db.query(
-      "SELECT rol_id, rol FROM roles ORDER BY rol_id",
-      (err, results) => {
-        if (err) {
-          return callback(err, null);
-        }
-        // PostgreSQL devuelve results.rows, MySQL devuelve results directamente
-        const rows = results.rows || results;
-        callback(null, rows);
-      }
+      `
+    SELECT rol_id, rol
+    FROM roles 
+    `,
+      callback
     );
   }
 }
