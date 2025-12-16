@@ -101,25 +101,53 @@ class Database {
    * @returns {Object} Query convertida y parámetros
    */
   convertMySQLToPostgreSQL(query, params = []) {
+    if (!query || typeof query !== 'string') {
+      return { query: query || '', params: params || [] };
+    }
+
     let convertedQuery = query;
     const convertedParams = [];
 
-    // Reemplazar ? con $1, $2, $3, etc.
-    let paramIndex = 1;
-    convertedQuery = convertedQuery.replace(/\?/g, () => {
-      convertedParams.push(params[paramIndex - 1]);
-      return `$${paramIndex++}`;
-    });
-
-    // Convertir funciones específicas de MySQL
+    // Primero convertir funciones específicas de MySQL ANTES de reemplazar los ?
     convertedQuery = convertedQuery.replace(/NOW\(\)/gi, "CURRENT_TIMESTAMP");
-    convertedQuery = convertedQuery.replace(/LIMIT \? OFFSET \?/gi, "LIMIT $1 OFFSET $2");
     
     // Convertir DATE() a PostgreSQL
     convertedQuery = convertedQuery.replace(/DATE\(([^)]+)\)/gi, "DATE($1)");
 
     // Convertir GROUP_CONCAT (MySQL) a STRING_AGG (PostgreSQL)
-    convertedQuery = convertedQuery.replace(/GROUP_CONCAT\(([^)]+)\)/gi, "STRING_AGG($1, ', ')");
+    // GROUP_CONCAT necesita ser convertido antes de reemplazar los ?
+    convertedQuery = convertedQuery.replace(/GROUP_CONCAT\s*\(\s*([^)]+)\s*\)/gi, (match, p1) => {
+      // Si tiene SEPARATOR, extraerlo
+      const separatorMatch = p1.match(/SEPARATOR\s+['"]([^'"]+)['"]/i);
+      const separator = separatorMatch ? separatorMatch[1] : ', ';
+      const field = p1.replace(/\s*SEPARATOR\s+['"][^'"]+['"]/i, '').trim();
+      return `STRING_AGG(${field}, '${separator}')`;
+    });
+
+    // Reemplazar ? con $1, $2, $3, etc. (después de convertir funciones)
+    let paramIndex = 1;
+    const questionMarkRegex = /\?/g;
+    let match;
+    const parts = [];
+    let lastIndex = 0;
+    
+    // Resetear el regex para asegurar que funcione correctamente
+    questionMarkRegex.lastIndex = 0;
+    
+    // Procesar manualmente para evitar problemas con callbacks
+    while ((match = questionMarkRegex.exec(convertedQuery)) !== null) {
+      parts.push(convertedQuery.substring(lastIndex, match.index));
+      if (paramIndex - 1 < params.length) {
+        convertedParams.push(params[paramIndex - 1]);
+      } else {
+        // Si no hay suficientes parámetros, agregar undefined
+        convertedParams.push(undefined);
+      }
+      parts.push(`$${paramIndex++}`);
+      lastIndex = match.index + 1;
+    }
+    parts.push(convertedQuery.substring(lastIndex));
+    convertedQuery = parts.join('');
 
     return {
       query: convertedQuery,
@@ -158,10 +186,23 @@ class Database {
 // Crear instancia única
 const instance = new Database();
 
-// Exportar tanto el pool como métodos compatibles
-module.exports = instance.getConnection();
-module.exports.query = instance.query.bind(instance);
-module.exports.getConnection = instance.getConnection.bind(instance);
-module.exports.getClient = instance.getClient.bind(instance);
-module.exports.transaction = instance.transaction.bind(instance);
-module.exports.pool = instance.pool;
+// Exportar métodos compatibles directamente desde la instancia
+// Esto evita problemas de recursión
+const dbExports = {
+  query: function(query, params, callback) {
+    // Llamar directamente al método de la instancia sin pasar por exports
+    return instance.query.call(instance, query, params, callback);
+  },
+  getConnection: function() {
+    return instance.getConnection();
+  },
+  getClient: function() {
+    return instance.getClient();
+  },
+  transaction: function(callback) {
+    return instance.transaction(callback);
+  },
+  pool: instance.pool
+};
+
+module.exports = dbExports;

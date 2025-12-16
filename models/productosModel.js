@@ -91,16 +91,34 @@ class Producto {
     // Redondear porcentaje_iva a 2 decimales
     const porcentajeIVA = nuevoProducto.porcentaje_iva ? Math.round(parseFloat(nuevoProducto.porcentaje_iva) * 100) / 100 : 21;
     
+    // Asegurar valores por defecto
+    const stock = nuevoProducto.stock !== undefined && nuevoProducto.stock !== null ? parseInt(nuevoProducto.stock) : 0;
+    const usuarioIdAuditoria = usuario_id || 1; // Usar 1 como default si no se proporciona
+    
+    console.log("agregarProducto - Valores a insertar:", {
+      nombre: nuevoProducto.nombre,
+      codigo: nuevoProducto.codigo || null,
+      marca: nuevoProducto.marca || null,
+      categoria_id: nuevoProducto.categoria_id || null,
+      stock: stock,
+      precio: precioFinal,
+      proveedor_id: nuevoProducto.proveedor_id || null,
+      precio_compra_base: precioCompraBase,
+      es_medicamento: nuevoProducto.es_medicamento || false,
+      porcentaje_iva: porcentajeIVA,
+    });
+    
     db.query(
       `INSERT INTO productos (nombre, codigo, marca, categoria_id, stock, precio, proveedor_id, 
        precio_compra_base, es_medicamento, porcentaje_iva) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       RETURNING producto_id`,
       [
         nuevoProducto.nombre,
-        nuevoProducto.codigo,
-        nuevoProducto.marca,
+        nuevoProducto.codigo || null,
+        nuevoProducto.marca || null,
         nuevoProducto.categoria_id || null,
-        nuevoProducto.stock,
+        stock,
         precioFinal,
         nuevoProducto.proveedor_id || null,
         precioCompraBase,
@@ -109,20 +127,35 @@ class Producto {
       ],
       (err, result) => {
         if (err) {
+          console.error("Error al insertar producto:", err);
+          console.error("Detalles del error:", {
+            message: err.message,
+            code: err.code,
+            detail: err.detail,
+            hint: err.hint,
+          });
           return callback(err, null);
         }
-        const productoId = result.rows ? result.rows[0].producto_id : result.insertId;
+        // PostgreSQL devuelve el ID en result.rows[0].producto_id
+        const productoId = result.rows && result.rows[0] ? result.rows[0].producto_id : (result.insertId || null);
+        
+        if (!productoId) {
+          console.error("Error: No se pudo obtener el ID del producto insertado");
+          console.error("Result object:", JSON.stringify(result, null, 2));
+          return callback(new Error("No se pudo obtener el ID del producto insertado"), null);
+        }
+        
+        // Registrar en auditoría (no bloquear si falla)
         db.query(
           `INSERT INTO auditoria_productos (producto_id, accion, detalle_cambio, fecha_movimiento, usuario_id) VALUES ($1, 'CREAR', $2, NOW(), $3)`,
-          [productoId, `Se ha creado un nuevo producto ${nuevoProducto.nombre} → Código ${nuevoProducto.codigo}`, usuario_id],
+          [productoId, `Se ha creado un nuevo producto ${nuevoProducto.nombre} → Código ${nuevoProducto.codigo || 'N/A'}`, usuarioIdAuditoria],
           (err) => {
             if (err) {
-              console.error("Error al registrar en auditoría:", err);
+              console.error("Error al registrar en auditoría (no crítico):", err);
             }
           }
         );
-        const id = result.rows ? result.rows[0].producto_id : result.insertId;
-        callback(null, { id, ...nuevoProducto });
+        callback(null, { id: productoId, producto_id: productoId, ...nuevoProducto });
       }
     );
   }
@@ -130,18 +163,20 @@ class Producto {
   static actualizarProducto(producto_id, producto, callback) {
     // 1️⃣ Obtener el producto actual antes de la actualización
     db.query(
-      "SELECT * FROM productos WHERE producto_id = ?",
+      "SELECT * FROM productos WHERE producto_id = $1",
       [producto_id],
       (err, resultados) => {
         if (err) {
           return callback(err, null);
         }
 
-        if (resultados.length === 0) {
+        // PostgreSQL devuelve results.rows
+        const rows = resultados.rows || resultados;
+        if (!rows || rows.length === 0) {
           return callback(new Error("Producto no encontrado"), null);
         }
 
-        const productoActual = resultados[0];
+        const productoActual = rows[0];
         let detalle_cambio = "";
 
         // 2️⃣ Comparar campo por campo y generar la descripción del cambio
@@ -215,7 +250,7 @@ class Producto {
 
         if (detalle_cambio !== "") {
           db.query(
-            "INSERT INTO auditoria_productos (producto_id, accion, detalle_cambio, fecha_movimiento, usuario_id) VALUES (?, 'ACTUALIZAR', ?, NOW(), ?)",
+            "INSERT INTO auditoria_productos (producto_id, accion, detalle_cambio, fecha_movimiento, usuario_id) VALUES ($1, 'ACTUALIZAR', $2, NOW(), $3)",
             [producto_id, detalle_cambio, producto.usuario_id], // usuario_id por defecto 1 si no está disponible
             (err) => {
               if (err) {
@@ -236,8 +271,8 @@ class Producto {
     callback
   ) {
     db.query(
-      `INSERT INTO auditoria_productos (producto_id, accion, fecha_movimiento,detalle_cambio, usuario_id) VALUES (?, 'ELIMINAR', NOW(),'Se ha eliminado este producto ${productoNombre} → Código ${productoCodigo}',?)`,
-      [producto_id, usuario_id],
+      `INSERT INTO auditoria_productos (producto_id, accion, fecha_movimiento,detalle_cambio, usuario_id) VALUES ($1, 'ELIMINAR', NOW(),$2,$3)`,
+      [producto_id, `Se ha eliminado este producto ${productoNombre} → Código ${productoCodigo}`, usuario_id],
       (err) => {
         if (err) {
           console.error("Error al registrar en auditoría:", err);
@@ -246,7 +281,7 @@ class Producto {
     );
 
     return db.query(
-      "UPDATE productos SET deleted_at = NOW() WHERE producto_id = ?",
+      "UPDATE productos SET deleted_at = NOW() WHERE producto_id = $1",
       [producto_id],
       callback
     );

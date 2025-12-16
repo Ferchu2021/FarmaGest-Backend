@@ -143,6 +143,8 @@ class Usuario {
     user_agent,
     callback
   ) {
+    console.log("validarUsuarioLogin llamado con correo:", correo);
+    
     db.query(
       `
       SELECT 
@@ -154,7 +156,7 @@ class Usuario {
         u.rol_id,
         r.rol, 
         u.contrasena,  
-        GROUP_CONCAT(p.permiso) as permisos
+        STRING_AGG(p.permiso, ', ') as permisos
       FROM 
         usuarios as u
       LEFT JOIN 
@@ -164,73 +166,92 @@ class Usuario {
       LEFT JOIN 
         permisos as p on p.permiso_id = rp.permiso_id
       WHERE 
-        u.correo = ?
+        u.correo = $1
       GROUP BY 
-        u.usuario_id, u.nombre, u.apellido, u.correo, u.estado, u.rol_id;
+        u.usuario_id, u.nombre, u.apellido, u.correo, u.estado, u.rol_id, r.rol;
       `,
       [correo],
       (err, results) => {
         if (err) {
-          return callback(err);
+          console.error("Error en query de login:", err);
+          return callback(new Error("Correo o contraseña incorrectos"));
         }
 
-        if (results.length === 0) {
+        console.log("Query ejecutada, results:", results ? (results.rows ? results.rows.length : 0) : 0);
+
+        // Verificar si results tiene rows y tiene elementos
+        if (!results || !results.rows || !Array.isArray(results.rows) || results.rows.length === 0) {
           // No se encontró el usuario
+          console.log("Usuario no encontrado");
           return callback(new Error("Correo o contraseña incorrectos"));
         }
 
         // Usuario encontrado, compara la contraseña encriptada
-        const usuario = results[0];
+        const usuario = results.rows[0];
+        console.log("Usuario encontrado:", usuario.correo);
+        
+        // Verificar que el usuario tenga contraseña
+        if (!usuario || !usuario.contrasena) {
+          console.log("Usuario sin contraseña");
+          return callback(new Error("Correo o contraseña incorrectos"));
+        }
 
         bcrypt.compare(contrasena, usuario.contrasena, (err, match) => {
           if (err) {
-            return callback(err);
-          }
-
-          if (!match) {
-            // Contraseña incorrecta
+            console.error("Error al comparar contraseña:", err);
             return callback(new Error("Correo o contraseña incorrectos"));
           }
+
+          console.log("Comparacion de contraseña, match:", match);
+
+          if (!match) {
+            // Contraseña incorrecta - retornar error inmediatamente sin crear sesión
+            console.log("Contraseña incorrecta");
+            return callback(new Error("Correo o contraseña incorrectos"));
+          }
+
+          // Contraseña correcta - crear sesión
           const sessionId = uuidv4(); // Generar un UUID único para la sesión
+          
           // Cerrar cualquier sesión activa antes de insertar una nueva
           db.query(
             `UPDATE sesiones 
    SET hora_logout = NOW() 
-   WHERE correo_usuario = ? AND hora_logout IS NULL`,
+   WHERE correo_usuario = $1 AND hora_logout IS NULL`,
             [correo],
             (err, resultado) => {
               if (err) {
                 console.error("Error al cerrar sesión anterior:", err);
-                return callback(err);
+                // No retornar error aquí, continuar con la creación de sesión
               }
 
               // Insertar la nueva sesión
               db.query(
                 `INSERT INTO sesiones (sesion_id, correo_usuario, navegador, ip, hora_logueo, ultima_actividad, hora_logout)
-                  VALUES (?, ?, ?, ?, NOW(), NOW(), NULL)`,
+                  VALUES ($1, $2, $3, $4, NOW(), NOW(), NULL)`,
                 [sessionId, correo, user_agent, ip_address],
                 (err, resultado) => {
                   if (err) {
                     console.error("Error al insertar sesión:", err);
-                    return callback(err);
+                    // No retornar error aquí, la sesión puede fallar pero el login es válido
                   }
+                  
+                  // Retornar los detalles del usuario (incluso si la sesión falló)
+                  callback(null, {
+                    usuario_id: usuario.usuario_id,
+                    nombre: usuario.nombre,
+                    apellido: usuario.apellido,
+                    correo: usuario.correo,
+                    estado: usuario.estado,
+                    rol_id: usuario.rol_id,
+                    rol: usuario.rol,
+                    permisos: usuario.permisos,
+                    sesion_id: sessionId,
+                  });
                 }
               );
             }
           );
-
-          // Contraseña correcta, retorna los detalles del usuario
-          callback(null, {
-            usuario_id: usuario.usuario_id,
-            nombre: usuario.nombre,
-            apellido: usuario.apellido,
-            correo: usuario.correo,
-            estado: usuario.estado,
-            rol_id: usuario.rol_id,
-            rol: usuario.rol,
-            permisos: usuario.permisos,
-            sesion_id: sessionId,
-          });
         });
       }
     );
@@ -238,11 +259,16 @@ class Usuario {
 
   static obtenerRoles(callback) {
     return db.query(
-      `
-    SELECT rol_id, rol
-    FROM roles 
-    `,
-      callback
+      `SELECT rol_id, rol FROM roles ORDER BY rol_id`,
+      [],
+      (err, results) => {
+        if (err) {
+          return callback(err, null);
+        }
+        // PostgreSQL devuelve results.rows, MySQL devuelve results directamente
+        const rows = results.rows || results;
+        callback(null, rows);
+      }
     );
   }
 }

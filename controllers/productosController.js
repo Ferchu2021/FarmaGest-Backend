@@ -36,30 +36,109 @@ const productosController = {
   },
 
   agregarProducto: (req, res) => {
-    const { nombre, codigo, marca, categoria_id, stock, precio, usuario_id, proveedor_id } =
-      req.body;
+    try {
+      const { 
+        nombre, 
+        codigo, 
+        marca, 
+        categoria_id, 
+        stock, 
+        precio, 
+        usuario_id, 
+        proveedor_id,
+        precio_compra_base,
+        es_medicamento,
+        porcentaje_iva
+      } = req.body;
 
-    const nuevoProducto = new Producto(
-      nombre,
-      codigo,
-      marca,
-      categoria_id,
-      stock,
-      precio
-    );
-    nuevoProducto.proveedor_id = proveedor_id || null;
+      console.log("agregarProducto - Datos recibidos (raw):", JSON.stringify(req.body, null, 2));
 
-    Producto.agregarProducto(nuevoProducto, usuario_id, (err, resultado) => {
-      if (err) {
-        console.error("Error al agregar producto:", err);
-        res.status(500).json({ mensaje: "Error al agregar producto" });
-      } else {
-        res.status(201).json({
-          mensaje: "Producto agregado correctamente",
-          producto_id: resultado.id,
+      // Validar campos requeridos
+      if (!nombre || nombre.trim() === "") {
+        return res.status(400).json({ 
+          mensaje: "El nombre del producto es requerido",
+          error: "VALIDATION_ERROR"
         });
       }
-    });
+
+      // Validar y parsear precio
+      let precioParsed = 0;
+      if (precio !== undefined && precio !== null && precio !== "") {
+        precioParsed = parseFloat(String(precio).replace(",", "."));
+        if (isNaN(precioParsed) || precioParsed < 0) {
+          return res.status(400).json({ 
+            mensaje: "El precio debe ser un número válido mayor o igual a 0",
+            error: "VALIDATION_ERROR"
+          });
+        }
+      } else {
+        return res.status(400).json({ 
+          mensaje: "El precio es requerido",
+          error: "VALIDATION_ERROR"
+        });
+      }
+
+      // Parsear otros campos numéricos
+      const stockParsed = stock !== undefined && stock !== null ? parseInt(stock) : 0;
+      const categoriaIdParsed = (categoria_id && categoria_id !== "" && categoria_id !== "0") ? parseInt(categoria_id) : null;
+      const proveedorIdParsed = (proveedor_id && proveedor_id !== "" && proveedor_id !== "0") ? parseInt(proveedor_id) : null;
+      const usuarioIdParsed = usuario_id ? parseInt(usuario_id) : 1; // Default a 1 si no se proporciona
+
+      console.log("agregarProducto - Datos parseados:", {
+        nombre: nombre.trim(),
+        codigo: codigo || null,
+        marca: marca || null,
+        categoria_id: categoriaIdParsed,
+        stock: stockParsed,
+        precio: precioParsed,
+        usuario_id: usuarioIdParsed,
+        proveedor_id: proveedorIdParsed,
+        precio_compra_base: precio_compra_base || null,
+        es_medicamento: es_medicamento || false,
+        porcentaje_iva: porcentaje_iva || 21,
+      });
+
+      const nuevoProducto = new Producto(
+        nombre.trim(),
+        codigo || null,
+        marca || null,
+        categoriaIdParsed,
+        stockParsed,
+        precioParsed
+      );
+      nuevoProducto.proveedor_id = proveedorIdParsed;
+      nuevoProducto.precio_compra_base = precio_compra_base ? parseFloat(String(precio_compra_base).replace(",", ".")) : null;
+      nuevoProducto.es_medicamento = es_medicamento === true || es_medicamento === "true";
+      nuevoProducto.porcentaje_iva = porcentaje_iva ? parseFloat(String(porcentaje_iva).replace(",", ".")) : 21;
+
+      Producto.agregarProducto(nuevoProducto, usuarioIdParsed, (err, resultado) => {
+        if (err) {
+          console.error("Error al agregar producto:", err);
+          console.error("Detalles del error:", {
+            message: err.message,
+            code: err.code,
+            detail: err.detail,
+            hint: err.hint,
+          });
+          return res.status(500).json({ 
+            mensaje: "Error al agregar producto",
+            error: err.message || "INTERNAL_SERVER_ERROR"
+          });
+        } else {
+          // PostgreSQL devuelve { id, ...nuevoProducto } desde el modelo
+          res.status(201).json({
+            mensaje: "Producto agregado correctamente",
+            producto_id: resultado.id || resultado.producto_id,
+          });
+        }
+      });
+    } catch (error) {
+      console.error("Error inesperado en agregarProducto:", error);
+      res.status(500).json({ 
+        mensaje: "Error interno del servidor",
+        error: error.message || "INTERNAL_SERVER_ERROR"
+      });
+    }
   },
 
   actualizarProducto: (req, res) => {

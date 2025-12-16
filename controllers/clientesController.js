@@ -6,8 +6,10 @@ const clientesController = {
     const pageSize = parseInt(req.query.pageSize) || 99;
     const search = req.query.search || "";
     const sesion = req.query.sesion;
+    const obraSocialID = req.query.obraSocialID ? parseInt(req.query.obraSocialID) : 0;
+    const ciudadID = req.query.ciudadID ? parseInt(req.query.ciudadID) : 0;
 
-    Cliente.obtenerClientes(page, pageSize, search, sesion, (err, clientes) => {
+    Cliente.obtenerClientes(page, pageSize, search, sesion, obraSocialID, ciudadID, (err, clientes) => {
       if (err) {
         console.error("Error al obtener clientes:", err);
         res.status(500).json({ mensaje: "Error al obtener clientes" });
@@ -26,27 +28,102 @@ const clientesController = {
   },
 
   agregarCliente: (req, res) => {
-    const { nombre, apellido, dni, obra_social_id, ciudad_id, usuario_id } =
-      req.body;
-    const nuevoCliente = new Cliente(
-      nombre,
-      apellido,
-      dni,
-      obra_social_id,
-      ciudad_id
-    );
+    try {
+      const { nombre, apellido, dni, obra_social_id, ciudad_id, usuario_id } =
+        req.body;
 
-    Cliente.agregarCliente(nuevoCliente, usuario_id, (err, resultado) => {
-      if (err) {
-        console.error("Error al agregar cliente:", err);
-        res.status(500).json({ mensaje: "Error al agregar cliente" });
-      } else {
-        res.status(201).json({
-          mensaje: "Cliente agregado correctamente",
-          cliente_id: resultado.insertId,
+      console.log("agregarCliente - Datos recibidos:", {
+        nombre,
+        apellido,
+        dni,
+        obra_social_id,
+        ciudad_id,
+        usuario_id,
+      });
+
+      // Validar campos requeridos
+      if (!nombre || nombre.trim() === "") {
+        return res.status(400).json({ 
+          mensaje: "El nombre es requerido",
+          error: "VALIDATION_ERROR"
         });
       }
-    });
+
+      if (!apellido || apellido.trim() === "") {
+        return res.status(400).json({ 
+          mensaje: "El apellido es requerido",
+          error: "VALIDATION_ERROR"
+        });
+      }
+
+      if (!dni || dni.trim() === "") {
+        return res.status(400).json({ 
+          mensaje: "El DNI es requerido",
+          error: "VALIDATION_ERROR"
+        });
+      }
+
+      // Parsear valores
+      const obraSocialIdParsed = (obra_social_id && obra_social_id !== "" && obra_social_id !== "0") ? parseInt(obra_social_id) : null;
+      const ciudadIdParsed = (ciudad_id && ciudad_id !== "" && ciudad_id !== "0") ? parseInt(ciudad_id) : null;
+      const usuarioIdParsed = usuario_id ? parseInt(usuario_id) : 1;
+
+      console.log("agregarCliente - Datos parseados:", {
+        nombre: nombre.trim(),
+        apellido: apellido.trim(),
+        dni: dni.trim(),
+        obra_social_id: obraSocialIdParsed,
+        ciudad_id: ciudadIdParsed,
+        usuario_id: usuarioIdParsed,
+      });
+
+      const nuevoCliente = new Cliente(
+        nombre.trim(),
+        apellido.trim(),
+        dni.trim(),
+        obraSocialIdParsed,
+        ciudadIdParsed
+      );
+
+      Cliente.agregarCliente(nuevoCliente, usuarioIdParsed, (err, resultado) => {
+        if (err) {
+          console.error("Error al agregar cliente:", err);
+          console.error("Detalles del error:", {
+            message: err.message,
+            code: err.code,
+            detail: err.detail,
+            hint: err.hint,
+            constraint: err.constraint,
+          });
+          
+          // Manejar errores específicos
+          if (err.code === '23505') {
+            // Violación de restricción única (DNI duplicado)
+            return res.status(409).json({ 
+              mensaje: "El DNI ya está registrado",
+              error: "DUPLICATE_DNI"
+            });
+          }
+          
+          return res.status(500).json({ 
+            mensaje: err.detail || err.message || "Error al agregar cliente",
+            error: err.code || "INTERNAL_SERVER_ERROR"
+          });
+        } else {
+          console.log("Cliente agregado exitosamente:", resultado);
+          res.status(201).json({
+            mensaje: "Cliente agregado correctamente",
+            cliente_id: resultado.id || resultado.cliente_id || resultado.insertId,
+          });
+        }
+      });
+    } catch (error) {
+      console.error("Error inesperado en agregarCliente:", error);
+      res.status(500).json({ 
+        mensaje: "Error interno del servidor",
+        error: error.message || "INTERNAL_SERVER_ERROR"
+      });
+    }
   },
 
   actualizarCliente: (req, res) => {

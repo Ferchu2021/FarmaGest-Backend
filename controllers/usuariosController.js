@@ -124,30 +124,97 @@ const usuariosController = {
 
   obtenerRoles: (req, res) => {
     Usuario.obtenerRoles((err, roles) => {
-      if (err) throw err;
-      res.json(roles);
+      if (err) {
+        console.error("Error al obtener roles:", err);
+        return res.status(500).json({ 
+          mensaje: "Error al obtener roles",
+          error: err.message || "INTERNAL_SERVER_ERROR"
+        });
+      }
+      // Asegurarse de que roles es un array
+      const rolesArray = Array.isArray(roles) ? roles : (roles?.rows || []);
+      res.json(rolesArray);
     });
   },
 
   validarUsuarioLogin: (req, res) => {
-    const correo = req.query.correo;
-    const contrasena = req.query.contrasena;
-    const ip_address = req.query.ip_address;
-    const user_agent = req.query.user_agent;
+    try {
+      const correo = req.query.correo;
+      const contrasena = req.query.contrasena;
+      const ip_address = req.query.ip_address;
+      const user_agent = req.query.user_agent;
 
-    Usuario.validarUsuarioLogin(
-      correo,
-      contrasena,
-      ip_address,
-      user_agent,
-      (err, usuarios) => {
-        if (err) {
-          res.status(401).json("Error: Correo o contraseña incorrectos");
-        } else {
-          res.json(usuarios);
-        }
+      console.log("validarUsuarioLogin - correo:", correo);
+
+      // Validar que se proporcionaron los parámetros requeridos
+      if (!correo || !contrasena) {
+        console.log("Faltan parametros requeridos");
+        return res.status(400).json({ 
+          mensaje: "Correo y contraseña son requeridos",
+          error: "VALIDATION_ERROR"
+        });
       }
-    );
+
+      // Timeout para asegurar que siempre se responda
+      const timeout = setTimeout(() => {
+        if (!res.headersSent) {
+          console.log("Timeout en validarUsuarioLogin");
+          res.status(500).json({ 
+            mensaje: "Timeout al validar credenciales",
+            error: "TIMEOUT_ERROR"
+          });
+        }
+      }, 10000); // 10 segundos
+
+      Usuario.validarUsuarioLogin(
+        correo,
+        contrasena,
+        ip_address,
+        user_agent,
+        (err, usuarios) => {
+          clearTimeout(timeout);
+          
+          if (err) {
+            // Devolver un objeto JSON consistente para que el frontend pueda manejarlo
+            console.error("Error en validarUsuarioLogin callback:", err);
+            const errorResponse = { 
+              mensaje: err.message || "Correo o contraseña incorrectos",
+              error: "AUTH_ERROR"
+            };
+            console.log("Enviando respuesta 401:", JSON.stringify(errorResponse));
+            
+            if (!res.headersSent) {
+              return res.status(401).json(errorResponse);
+            } else {
+              console.log("Headers ya enviados, no se puede enviar respuesta");
+            }
+          } else {
+            if (usuarios) {
+              console.log("Login exitoso para:", usuarios.correo);
+              if (!res.headersSent) {
+                res.json(usuarios);
+              }
+            } else {
+              console.log("No se retornaron usuarios");
+              if (!res.headersSent) {
+                res.status(401).json({ 
+                  mensaje: "Correo o contraseña incorrectos",
+                  error: "AUTH_ERROR"
+                });
+              }
+            }
+          }
+        }
+      );
+    } catch (error) {
+      console.error("Error inesperado en validarUsuarioLogin:", error);
+      if (!res.headersSent) {
+        res.status(500).json({ 
+          mensaje: "Error interno del servidor",
+          error: "INTERNAL_ERROR"
+        });
+      }
+    }
   },
 };
 
